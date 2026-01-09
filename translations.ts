@@ -200,7 +200,6 @@ export const translations: Record<Language, Record<string, string>> = {
     buildingLogic: "بفكر...",
     finalizingSolution: "بكتبلك الحل..."
   },
-  // Fix: Adding French translations to satisfy Language enum
   [Language.FR]: {
     home: "Accueil",
     chat: "Chat IA",
@@ -267,7 +266,6 @@ export const translations: Record<Language, Record<string, string>> = {
     buildingLogic: "Recherche...",
     finalizingSolution: "Écriture..."
   },
-  // Fix: Adding Spanish translations to satisfy Language enum
   [Language.ES]: {
     home: "Inicio",
     chat: "Chat IA",
@@ -319,7 +317,7 @@ export const translations: Record<Language, Record<string, string>> = {
     physics: "Física",
     chemistry: "Química",
     history: "Historia",
-    arabic: "Árabe",
+    arabic: "Áرabe",
     english: "Inglés",
     selectSubject: "Elegir materia",
     selectTutor: "Elegir modo",

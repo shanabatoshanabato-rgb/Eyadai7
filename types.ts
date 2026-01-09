@@ -25,14 +25,3 @@ export interface AppSettings {
   theme: Theme;
   voiceName: string;
 }
-
-export interface ProjectFile {
-  path: string;
-  content: string;
-}
-
-export interface GeneratedProject {
-  name: string;
-  description: string;
-  files: ProjectFile[];
-}
