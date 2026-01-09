@@ -46,10 +46,11 @@ export const generateText = async (prompt: string, options?: GenerateOptions): P
       systemInstruction: options?.systemInstruction || "You are Eyad AI, a helpful assistant."
     };
 
-    // نستخدم Pro دائماً عند البحث لضمان استقرار النتائج والأدوات
+    // نستخدم Pro دائماً عند البحث لأنه الوحيد اللي بيتعامل مع الـ Grounding صح
     const modelName = options?.useSearch ? 'gemini-3-pro-preview' : MODELS.TEXT;
 
-    if (options?.responseMimeType) {
+    // هام: لا نستخدم responseMimeType مع البحث لأن ده بيعمل 400 Bad Request في أغلب الأوقات
+    if (options?.responseMimeType && !options?.useSearch) {
       config.responseMimeType = options.responseMimeType;
     }
 
@@ -66,7 +67,6 @@ export const generateText = async (prompt: string, options?: GenerateOptions): P
     const text = response.text || '';
     const sources: { title: string; uri: string }[] = [];
 
-    // استخراج المصادر من groundingMetadata بشكل نظيف
     const chunks = response.candidates?.[0]?.groundingMetadata?.groundingChunks;
     if (chunks) {
       chunks.forEach((chunk: any) => {
