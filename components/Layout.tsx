@@ -9,7 +9,7 @@ import {
   X,
   Sparkles,
   PhoneCall,
-  FileText,
+  Book,
   BookOpen
 } from 'lucide-react';
 import { useTranslation } from '../translations';
@@ -23,7 +23,7 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
     { name: t('home'), path: '/', icon: Home },
     { name: t('chat'), path: '/chat', icon: MessageSquare },
     { name: t('homework'), path: '/homework', icon: BookOpen },
-    { name: t('docs'), path: '/docs', icon: FileText },
+    { name: t('docs'), path: '/docs', icon: Book },
     { name: t('voice'), path: '/voice', icon: PhoneCall },
     { name: t('settings'), path: '/settings', icon: SettingsIcon },
   ];
@@ -33,7 +33,7 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
   return (
     <div className="min-h-screen flex flex-col bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 transition-colors duration-500">
       <nav className="sticky top-0 z-50 bg-white/70 dark:bg-slate-950/70 backdrop-blur-xl border-b border-slate-200 dark:border-slate-800">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div className="max-w-7xl auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between h-16">
             <div className="flex items-center">
               <Link to="/" className="flex items-center gap-2 text-2xl font-black text-blue-600 dark:text-blue-400 tracking-tighter">

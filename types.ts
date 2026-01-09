@@ -26,8 +26,13 @@ export interface AppSettings {
   voiceName: string;
 }
 
-export interface GeneratedDoc {
-  title: string;
+export interface ProjectFile {
+  path: string;
   content: string;
-  references: string[];
+}
+
+export interface GeneratedProject {
+  name: string;
+  description: string;
+  files: ProjectFile[];
 }

@@ -6,8 +6,9 @@ import {
   ArrowRight, 
   PhoneCall, 
   BookOpen, 
-  FileText, 
-  Globe2 
+  Book, 
+  Globe2,
+  ShieldCheck 
 } from 'lucide-react';
 import { useTranslation } from '../translations';
 
@@ -19,7 +20,7 @@ export const Home: React.FC = () => {
       {/* Hero Section */}
       <section className="max-w-5xl mx-auto text-center space-y-8">
         <div className="inline-flex items-center gap-2 px-4 py-2 bg-blue-50 dark:bg-blue-900/30 rounded-full text-blue-600 dark:text-blue-400 text-xs font-black uppercase tracking-widest border border-blue-100 dark:border-blue-800">
-          <Sparkles className="w-3.5 h-3.5" /> Next-Gen AI Assistant
+          <Sparkles className="w-3.5 h-3.5" /> Next-Gen AI Engineer & Guide
         </div>
         <h1 className="text-6xl md:text-8xl font-black text-slate-900 dark:text-white tracking-tighter leading-tight">
           {t('heroTitle')} <br />
@@ -40,33 +41,34 @@ export const Home: React.FC = () => {
 
       {/* Unified Features Bento Grid */}
       <section className="max-w-6xl mx-auto grid grid-cols-1 md:grid-cols-3 gap-6">
-        <div className="md:col-span-2 p-8 bg-blue-600 rounded-[40px] text-white space-y-6 relative overflow-hidden group">
+        <div className="md:col-span-2 p-10 bg-emerald-600 rounded-[40px] text-white space-y-6 relative overflow-hidden group">
           <div className="relative z-10">
-            <PhoneCall className="w-16 h-16 mb-6 opacity-80" />
-            <h3 className="text-4xl font-black">{t('voice')}</h3>
-            <p className="text-blue-100 text-lg font-medium leading-relaxed max-w-md">
-              Speak naturally to Eyad AI. Our Live API enables real-time spoken interactions that feel human.
+            <Book className="w-16 h-16 mb-6 opacity-80" />
+            <h3 className="text-4xl font-black">{t('docs')}</h3>
+            <p className="text-emerald-50 text-lg font-medium leading-relaxed max-w-md">
+              احصل على إجابات شرعية موثقة من القرآن والسنة بأسلوب عصري ومبسط.
             </p>
-            <Link to="/voice" className="mt-8 inline-flex items-center gap-2 font-bold hover:gap-4 transition-all">
-              Try Voice Call <ArrowRight className="w-5 h-5" />
+            <Link to="/docs" className="mt-8 inline-flex items-center gap-2 font-bold hover:gap-4 transition-all bg-white/20 px-6 py-3 rounded-2xl backdrop-blur-lg">
+              ابدأ البحث <ArrowRight className="w-5 h-5" />
             </Link>
           </div>
           <div className="absolute top-0 right-0 -mr-20 -mt-20 w-80 h-80 bg-white/10 rounded-full blur-[100px]"></div>
+          <ShieldCheck className="absolute bottom-6 right-6 w-32 h-32 text-white/5" />
         </div>
 
         <div className="p-8 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-[40px] space-y-6">
           <BookOpen className="w-12 h-12 text-indigo-500" />
           <h3 className="text-2xl font-black">{t('homework')}</h3>
           <p className="text-slate-500 dark:text-slate-400 font-medium leading-relaxed">
-            From math to history, Eyad provides step-by-step solutions instantly inside the chat window.
+            From math to history, Eyad provides step-by-step solutions instantly.
           </p>
         </div>
 
         <div className="p-8 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-[40px] space-y-6">
-          <FileText className="w-12 h-12 text-green-500" />
-          <h3 className="text-2xl font-black">{t('docs')}</h3>
+          <PhoneCall className="w-12 h-12 text-green-500" />
+          <h3 className="text-2xl font-black">{t('voice')}</h3>
           <p className="text-slate-500 dark:text-slate-400 font-medium leading-relaxed">
-            Generate essays, reports, and code blocks with formatting and instant download.
+            Speak naturally to Eyad AI in real-time with ultra-low latency.
           </p>
         </div>
 
@@ -79,7 +81,7 @@ export const Home: React.FC = () => {
             </p>
           </div>
           <div className="flex gap-4">
-            <div className="px-6 py-3 bg-white/5 rounded-2xl font-bold border border-white/10 italic">"Bonjour, comment puis-je vous aider ?"</div>
+            <div className="px-6 py-3 bg-white/5 rounded-2xl font-bold border border-white/10 italic">"Bonjour, je suis Eyad."</div>
           </div>
         </div>
       </section>
