@@ -29,6 +29,22 @@ export const DocumentPage: React.FC = () => {
   const [answer, setAnswer] = useState<{ title: string; body: string; source: string; wisdom: string } | null>(null);
   const t = useTranslation();
 
+  const cleanJsonResponse = (text: string) => {
+    try {
+      // محاولة البحث عن أول { وآخر } لتنظيف أي نصوص زائدة من البحث
+      const startIdx = text.indexOf('{');
+      const endIdx = text.lastIndexOf('}');
+      if (startIdx !== -1 && endIdx !== -1) {
+        const jsonStr = text.substring(startIdx, endIdx + 1);
+        return JSON.parse(jsonStr);
+      }
+      return JSON.parse(text);
+    } catch (e) {
+      console.error("JSON Clean Error:", e);
+      throw new Error("Invalid format");
+    }
+  };
+
   const handleConsult = async () => {
     if (!question.trim()) return;
     setIsGenerating(true);
@@ -46,44 +62,31 @@ export const DocumentPage: React.FC = () => {
     const targetLang = langNames[currentLang as keyof typeof langNames] || "English";
 
     try {
-      const prompt = `You are "Eyad Al-Alem", a moderate and highly knowledgeable Islamic scholar. 
-      Answer this question accurately: "${question}".
+      const prompt = `Act as "Eyad Al-Alem", a top Islamic scholar. Provide an authenticated answer to: "${question}".
       
-      REQUIRED FORMAT:
+      CRITICAL: You MUST use Google Search to verify current dates or complex fatwas if needed.
+      CRITICAL: Return ONLY a JSON object with this structure:
       {
-        "title": "A respectful title for the answer in ${targetLang}",
-        "body": "A ${depth} detailed answer in ${targetLang}. Use Markdown for formatting (bold, lists). Must be clear and respectful.",
-        "source": "The specific Verse/Hadith number and collection name used in ${targetLang} (e.g. Surat Al-Baqarah: 255)",
-        "wisdom": "A short, beautiful spiritual reflection related to the topic in ${targetLang}"
-      }
-      
-      Ensure authenticity from Quran and Sahih Sunnah.`;
+        "title": "A respectful title in ${targetLang}",
+        "body": "Detailed ${depth} answer in ${targetLang} using Markdown. Cite Quran/Sunnah.",
+        "source": "Exact source reference in ${targetLang}",
+        "wisdom": "A spiritual reflection in ${targetLang}"
+      }`;
 
       const response = await generateText(prompt, { 
         useSearch: useSearch,
-        responseMimeType: "application/json",
-        systemInstruction: "You are Eyad Al-Alem, a virtual Islamic guide who provides verified knowledge from the Quran and Sunnah. You prioritize authenticity. You MUST respond with a valid JSON object only."
+        // لا نستخدم responseMimeType مع البحث في بعض الحالات لأنه يسبب تعارضاً، سنعتمد على التنظيف اليدوي
+        systemInstruction: "You are Eyad Al-Alem, an Islamic guide. You always provide answers in the requested JSON format. Even if you use search tools, the final output must be a single JSON object."
       });
       
-      try {
-        const parsed = JSON.parse(response);
-        setAnswer(parsed);
-      } catch (parseError) {
-        // Fallback: try to find JSON block manually if parsing fails
-        const startIdx = response.indexOf('{');
-        const endIdx = response.lastIndexOf('}');
-        if (startIdx !== -1 && endIdx !== -1) {
-          const jsonStr = response.substring(startIdx, endIdx + 1);
-          setAnswer(JSON.parse(jsonStr));
-        } else {
-          throw new Error("Could not parse response");
-        }
-      }
+      const parsed = cleanJsonResponse(response);
+      setAnswer(parsed);
+      
     } catch (err: any) {
       console.error("Islamic Hub Error:", err);
       setError(currentLang === Language.AR || currentLang === Language.EG 
-        ? "عذراً، حدث خطأ أثناء الاتصال بالمصادر. جرب إيقاف وضع البحث أو المحاولة لاحقاً." 
-        : "Sorry, an error occurred while connecting to sources. Try turning off Search or try again later.");
+        ? "عذراً، حدث خطأ. جرب إيقاف البحث مؤقتاً أو تأكد من اتصالك." 
+        : "An error occurred. Try disabling Search or check your connection.");
     } finally {
       setIsGenerating(false);
     }

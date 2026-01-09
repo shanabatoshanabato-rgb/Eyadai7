@@ -41,6 +41,9 @@ export const generateText = async (prompt: string, options?: GenerateOptions): P
       systemInstruction: options?.systemInstruction || "You are Eyad AI, a helpful assistant."
     };
 
+    // إذا كان البحث مفعلاً، نستخدم النموذج الأقوى للتعامل مع الأدوات
+    const modelName = options?.useSearch ? 'gemini-3-pro-preview' : MODELS.TEXT;
+
     if (options?.responseMimeType) {
       config.responseMimeType = options.responseMimeType;
     }
@@ -50,22 +53,26 @@ export const generateText = async (prompt: string, options?: GenerateOptions): P
     }
 
     const response = await ai.models.generateContent({
-      model: MODELS.TEXT,
+      model: modelName,
       contents: { parts },
       config
     });
 
     let text = response.text || '';
     
-    // إضافة المصادر إذا وجدت (Google Search Grounding)
-    const chunks = response.candidates?.[0]?.groundingMetadata?.groundingChunks;
-    if (chunks && chunks.length > 0 && !options?.responseMimeType) {
-      text += "\n\n### المصادر والمراجع:\n";
-      chunks.forEach((chunk: any) => {
-        if (chunk.web?.uri) {
-          text += `- [${chunk.web.title || chunk.web.uri}](${chunk.web.uri})\n`;
+    // إذا لم نكن نطلب JSON، نضيف المصادر بشكل يدوي في نهاية النص
+    if (!options?.responseMimeType) {
+      const chunks = response.candidates?.[0]?.groundingMetadata?.groundingChunks;
+      if (chunks && chunks.length > 0) {
+        const sourcesText = chunks
+          .filter((c: any) => c.web?.uri)
+          .map((c: any) => `- [${c.web.title || c.web.uri}](${c.web.uri})`)
+          .join('\n');
+        
+        if (sourcesText) {
+          text += `\n\n### المصادر والمراجع:\n${sourcesText}`;
         }
-      });
+      }
     }
 
     return text;
