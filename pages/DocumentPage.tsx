@@ -17,7 +17,8 @@ import {
   AlertCircle,
   ExternalLink,
   Link as LinkIcon,
-  RefreshCcw
+  RefreshCcw,
+  Clock
 } from 'lucide-react';
 import { generateText } from '../services/geminiService';
 import { useTranslation } from '../translations';
@@ -28,31 +29,21 @@ export const DocumentPage: React.FC = () => {
   const [depth, setDepth] = useState('standard');
   const [useSearch, setUseSearch] = useState(true);
   const [isGenerating, setIsGenerating] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<{ type: 'quota' | 'general' | null, message: string | null }>({ type: null, message: null });
   const [answer, setAnswer] = useState<{ title: string; body: string; source: string; wisdom: string } | null>(null);
   const [webSources, setWebSources] = useState<{title: string, uri: string}[]>([]);
   const t = useTranslation();
 
   const cleanJsonResponse = (text: string) => {
     try {
-      // تنظيف شامل للرد
       let cleaned = text.trim();
-      
-      // إزالة علامات المارك داون
       cleaned = cleaned.replace(/```json/g, '').replace(/```/g, '');
-      
-      // البحث عن أول { وآخر }
       const firstBrace = cleaned.indexOf('{');
       const lastBrace = cleaned.lastIndexOf('}');
-      
-      if (firstBrace === -1 || lastBrace === -1) {
-        throw new Error("No JSON object found");
-      }
-      
+      if (firstBrace === -1 || lastBrace === -1) throw new Error("No JSON object found");
       const jsonStr = cleaned.substring(firstBrace, lastBrace + 1);
       return JSON.parse(jsonStr);
     } catch (e) {
-      console.error("Advanced Parse Error:", e);
       throw new Error("FORMAT_ERROR");
     }
   };
@@ -60,11 +51,13 @@ export const DocumentPage: React.FC = () => {
   const handleConsult = async (forceSearch: boolean = useSearch) => {
     if (!question.trim()) return;
     setIsGenerating(true);
-    setError(null);
+    setError({ type: null, message: null });
     setAnswer(null);
     setWebSources([]);
 
     const currentLang = localStorage.getItem('eyad-ai-lang') || Language.EN;
+    const isArabic = currentLang === Language.AR || currentLang === Language.EG;
+    
     const langNames: Record<string, string> = {
       [Language.EN]: "English",
       [Language.AR]: "Standard Arabic",
@@ -76,14 +69,8 @@ export const DocumentPage: React.FC = () => {
 
     try {
       const prompt = `Act as "Eyad Al-Alem", a top Islamic scholar. Provide an authenticated answer to: "${question}".
-      
-      ${forceSearch ? "CRITICAL: You MUST use Google Search to verify any historical dates or current context." : "Use your internal knowledge to provide a fast and accurate answer."}
-      
-      CRITICAL: Your entire response must be a SINGLE JSON object. 
-      DO NOT include any text before or after the JSON. 
-      DO NOT put citations inside the JSON fields.
-      
-      JSON STRUCTURE (MUST FOLLOW EXACTLY):
+      ${forceSearch ? "CRITICAL: You MUST use Google Search to verify any historical dates or current context." : "Use your internal knowledge."}
+      Your entire response must be a SINGLE JSON object:
       {
         "title": "A respectful title in ${targetLang}",
         "body": "Detailed ${depth} answer in ${targetLang} using Markdown. Mention Quran/Sunnah evidence clearly.",
@@ -93,7 +80,7 @@ export const DocumentPage: React.FC = () => {
 
       const aiResponse = await generateText(prompt, { 
         useSearch: forceSearch,
-        systemInstruction: "You are Eyad Al-Alem. You are a strict JSON generator. Even when you search the web, you output your findings ONLY in the requested JSON structure. No conversational filler."
+        systemInstruction: "You are Eyad Al-Alem. You ONLY output JSON. No citations as text."
       });
       
       const parsed = cleanJsonResponse(aiResponse.text);
@@ -103,16 +90,27 @@ export const DocumentPage: React.FC = () => {
     } catch (err: any) {
       console.error("Consultation Failed:", err);
       
-      // محاولة تلقائية بدون بحث لو فشلت المرة الأولى بالبحث
-      if (forceSearch) {
-        console.log("Retrying without search for stability...");
+      const isQuotaError = err.message?.includes('429') || err.status === 429;
+      
+      if (isQuotaError) {
+        setError({
+          type: 'quota',
+          message: isArabic 
+            ? "خلصت رصيدك اليومي في جوجل! استنى شوية أو جرب تغير الـ API Key من الإعدادات بمفتاح جديد خالص."
+            : "You've exceeded your daily Google API quota. Please wait a bit or use a new API Key from a different project."
+        });
+      } else if (forceSearch) {
+        // إذا فشل البحث، جرب المحاولة العادية تلقائياً
         handleConsult(false);
         return;
+      } else {
+        setError({
+          type: 'general',
+          message: isArabic 
+            ? "حصلت مشكلة فنية بسيطة، جرب تغير صيغة السؤال أو تدوس 'اسأل إياد' تاني." 
+            : "A technical error occurred. Please try rephrasing or clicking 'Ask Eyad' again."
+        });
       }
-
-      setError(currentLang === Language.AR || currentLang === Language.EG 
-        ? "عذراً، نظام الحماية في الذكاء الاصطناعي رفض الإجابة أو حدث خطأ تقني. حاول تغيير صيغة السؤال." 
-        : "AI safety filter or technical error occurred. Please try rephrasing your question.");
     } finally {
       setIsGenerating(false);
     }
@@ -147,14 +145,20 @@ export const DocumentPage: React.FC = () => {
             <p className="text-slate-500 dark:text-slate-400 font-medium text-lg max-w-2xl">{t('docSubTitle')}</p>
           </div>
 
-          {error && (
-            <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 p-6 rounded-[2rem] flex items-start gap-4 text-amber-600 dark:text-amber-400">
-              <AlertCircle className="w-6 h-6 flex-shrink-0" />
+          {error.message && (
+            <div className={`p-6 rounded-[2rem] border flex items-start gap-4 animate-in fade-in zoom-in ${
+              error.type === 'quota' 
+              ? 'bg-amber-50 dark:bg-amber-900/20 border-amber-200 dark:border-amber-800 text-amber-700 dark:text-amber-400' 
+              : 'bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800 text-red-600 dark:text-red-400'
+            }`}>
+              {error.type === 'quota' ? <Clock className="w-6 h-6 flex-shrink-0" /> : <AlertCircle className="w-6 h-6 flex-shrink-0" />}
               <div className="space-y-1">
-                <p className="font-black uppercase tracking-widest text-xs">Stability Alert</p>
-                <p className="text-sm font-bold">{error}</p>
+                <p className="font-black uppercase tracking-widest text-xs">
+                  {error.type === 'quota' ? 'Quota Limit Reached' : 'System Alert'}
+                </p>
+                <p className="text-sm font-bold leading-relaxed">{error.message}</p>
                 <button onClick={() => handleConsult()} className="flex items-center gap-2 mt-2 text-xs underline font-black">
-                  <RefreshCcw className="w-3 h-3" /> Try Again
+                  <RefreshCcw className="w-3 h-3" /> {error.type === 'quota' ? 'Try Again Later' : 'Retry Now'}
                 </button>
               </div>
             </div>
@@ -189,7 +193,7 @@ export const DocumentPage: React.FC = () => {
                   className="flex-[2] py-5 bg-emerald-700 text-white rounded-2xl font-black text-xl hover:bg-emerald-800 shadow-2xl shadow-emerald-700/30 flex items-center justify-center gap-4 transition-all active:scale-95 disabled:opacity-50"
                 >
                   {isGenerating ? <Loader2 className="w-7 h-7 animate-spin" /> : <Sparkles className="w-7 h-7 fill-white" />}
-                  {isGenerating ? "Processing..." : t('startBuilding')}
+                  {isGenerating ? "Consulting Scholar..." : t('startBuilding')}
                 </button>
               </div>
             </div>
@@ -226,12 +230,12 @@ export const DocumentPage: React.FC = () => {
             <div className="bg-white dark:bg-slate-900 rounded-[3rem] p-10 md:p-14 border border-emerald-100 dark:border-slate-800 shadow-xl space-y-8">
               <div className="flex justify-between items-center border-b border-slate-100 dark:border-slate-800 pb-8">
                 <h2 className="text-3xl font-black dark:text-white leading-tight">{answer.title}</h2>
-                <button onClick={downloadAnswer} className="p-4 bg-emerald-50 dark:bg-emerald-900/30 text-emerald-600 rounded-2xl hover:bg-emerald-600 hover:text-white transition-all">
+                <button onClick={downloadAnswer} className="p-4 bg-emerald-50 dark:bg-emerald-900/30 text-emerald-600 rounded-2xl hover:bg-emerald-600 hover:text-white transition-all shadow-lg">
                   <Download className="w-6 h-6" />
                 </button>
               </div>
               <div className="prose prose-xl dark:prose-invert max-w-none">
-                <div className="whitespace-pre-wrap dark:text-slate-300 text-slate-700 font-medium leading-relaxed font-serif text-lg">
+                <div className="whitespace-pre-wrap dark:text-slate-300 text-slate-700 font-medium leading-relaxed font-serif text-lg md:text-xl">
                   {answer.body}
                 </div>
               </div>
@@ -268,7 +272,7 @@ export const DocumentPage: React.FC = () => {
                           <p className="text-[10px] text-slate-400 truncate">{source.uri}</p>
                         </div>
                       </div>
-                      <ExternalLink className="w-4 h-4 text-slate-300 group-hover:text-emerald-600" />
+                      <ExternalLink className="w-4 h-4 text-slate-300 group-hover:text-emerald-600 transition-colors" />
                     </a>
                   ))}
                 </div>
@@ -282,7 +286,7 @@ export const DocumentPage: React.FC = () => {
                 <div className="p-4 bg-white/10 rounded-2xl w-fit">
                   <Lightbulb className="w-8 h-8" />
                 </div>
-                <h3 className="text-2xl font-black uppercase tracking-tighter">Spiritual Reflection</h3>
+                <h3 className="text-2xl font-black uppercase tracking-tighter">Spiritual Wisdom</h3>
                 <p className="text-emerald-50 font-medium text-lg italic leading-relaxed">"{answer.wisdom}"</p>
                 <div className="pt-4 flex items-center gap-2 text-xs font-black uppercase tracking-widest opacity-60">
                   <Sparkles className="w-3 h-3" /> Eyad Al-Alem Guide

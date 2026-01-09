@@ -28,62 +28,79 @@ export interface AIResponse {
   sources: { title: string; uri: string }[];
 }
 
+// قائمة النماذج البديلة للتبديل بينها في حال فشل أحدهما بسبب الحصة (Quota)
+const TEXT_MODELS_FALLBACK = [
+  'gemini-3-flash-preview',
+  'gemini-flash-lite-latest',
+  'gemini-3-pro-preview'
+];
+
 export const generateText = async (prompt: string, options?: GenerateOptions): Promise<AIResponse> => {
-  try {
-    const ai = getAI();
-    const parts: any[] = [{ text: prompt }];
-    
-    if (options?.image) {
-      parts.push({
-        inlineData: {
-          data: options.image.data,
-          mimeType: options.image.mimeType
-        }
+  let lastError: any = null;
+
+  // محاولة استخدام النماذج المتاحة بالتتابع في حال حدوث خطأ 429
+  for (const modelName of (options?.useSearch ? ['gemini-3-pro-preview'] : TEXT_MODELS_FALLBACK)) {
+    try {
+      const ai = getAI();
+      const parts: any[] = [{ text: prompt }];
+      
+      if (options?.image) {
+        parts.push({
+          inlineData: {
+            data: options.image.data,
+            mimeType: options.image.mimeType
+          }
+        });
+      }
+
+      const config: any = {
+        systemInstruction: options?.systemInstruction || "You are Eyad AI, a helpful assistant."
+      };
+
+      if (options?.responseMimeType && !options?.useSearch) {
+        config.responseMimeType = options.responseMimeType;
+      }
+
+      if (options?.useSearch) {
+        config.tools = [{ googleSearch: {} }];
+      }
+
+      const response = await ai.models.generateContent({
+        model: modelName,
+        contents: { parts },
+        config
       });
+
+      const text = response.text || '';
+      const sources: { title: string; uri: string }[] = [];
+
+      const chunks = response.candidates?.[0]?.groundingMetadata?.groundingChunks;
+      if (chunks) {
+        chunks.forEach((chunk: any) => {
+          if (chunk.web?.uri) {
+            sources.push({
+              title: chunk.web.title || chunk.web.uri,
+              uri: chunk.web.uri
+            });
+          }
+        });
+      }
+
+      return { text, sources };
+    } catch (error: any) {
+      lastError = error;
+      // إذا كان الخطأ هو Quota Exceeded (429)، نجرب النموذج التالي
+      if (error.message?.includes('429') || error.status === 429) {
+        console.warn(`Model ${modelName} reached quota. Trying next fallback...`);
+        continue; 
+      }
+      // إذا كان خطأ آخر، نتوقف ونرمي الخطأ
+      throw error;
     }
-
-    const config: any = {
-      systemInstruction: options?.systemInstruction || "You are Eyad AI, a helpful assistant."
-    };
-
-    // نستخدم Pro دائماً عند البحث لأنه الوحيد اللي بيتعامل مع الـ Grounding صح
-    const modelName = options?.useSearch ? 'gemini-3-pro-preview' : MODELS.TEXT;
-
-    // هام: لا نستخدم responseMimeType مع البحث لأن ده بيعمل 400 Bad Request في أغلب الأوقات
-    if (options?.responseMimeType && !options?.useSearch) {
-      config.responseMimeType = options.responseMimeType;
-    }
-
-    if (options?.useSearch) {
-      config.tools = [{ googleSearch: {} }];
-    }
-
-    const response = await ai.models.generateContent({
-      model: modelName,
-      contents: { parts },
-      config
-    });
-
-    const text = response.text || '';
-    const sources: { title: string; uri: string }[] = [];
-
-    const chunks = response.candidates?.[0]?.groundingMetadata?.groundingChunks;
-    if (chunks) {
-      chunks.forEach((chunk: any) => {
-        if (chunk.web?.uri) {
-          sources.push({
-            title: chunk.web.title || chunk.web.uri,
-            uri: chunk.web.uri
-          });
-        }
-      });
-    }
-
-    return { text, sources };
-  } catch (error: any) {
-    console.error("Gemini Text Error:", error);
-    throw error;
   }
+
+  // إذا وصلنا هنا، يعني كل النماذج فشلت
+  throw lastError;
 };
 
 export const generateImage = async (prompt: string): Promise<string | null> => {
