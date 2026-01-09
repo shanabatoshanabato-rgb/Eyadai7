@@ -23,7 +23,12 @@ interface GenerateOptions {
   responseMimeType?: string;
 }
 
-export const generateText = async (prompt: string, options?: GenerateOptions): Promise<string> => {
+export interface AIResponse {
+  text: string;
+  sources: { title: string; uri: string }[];
+}
+
+export const generateText = async (prompt: string, options?: GenerateOptions): Promise<AIResponse> => {
   try {
     const ai = getAI();
     const parts: any[] = [{ text: prompt }];
@@ -41,7 +46,7 @@ export const generateText = async (prompt: string, options?: GenerateOptions): P
       systemInstruction: options?.systemInstruction || "You are Eyad AI, a helpful assistant."
     };
 
-    // إذا كان البحث مفعلاً، نستخدم النموذج الأقوى للتعامل مع الأدوات
+    // نستخدم Pro دائماً عند البحث لضمان استقرار النتائج والأدوات
     const modelName = options?.useSearch ? 'gemini-3-pro-preview' : MODELS.TEXT;
 
     if (options?.responseMimeType) {
@@ -58,24 +63,23 @@ export const generateText = async (prompt: string, options?: GenerateOptions): P
       config
     });
 
-    let text = response.text || '';
-    
-    // إذا لم نكن نطلب JSON، نضيف المصادر بشكل يدوي في نهاية النص
-    if (!options?.responseMimeType) {
-      const chunks = response.candidates?.[0]?.groundingMetadata?.groundingChunks;
-      if (chunks && chunks.length > 0) {
-        const sourcesText = chunks
-          .filter((c: any) => c.web?.uri)
-          .map((c: any) => `- [${c.web.title || c.web.uri}](${c.web.uri})`)
-          .join('\n');
-        
-        if (sourcesText) {
-          text += `\n\n### المصادر والمراجع:\n${sourcesText}`;
+    const text = response.text || '';
+    const sources: { title: string; uri: string }[] = [];
+
+    // استخراج المصادر من groundingMetadata بشكل نظيف
+    const chunks = response.candidates?.[0]?.groundingMetadata?.groundingChunks;
+    if (chunks) {
+      chunks.forEach((chunk: any) => {
+        if (chunk.web?.uri) {
+          sources.push({
+            title: chunk.web.title || chunk.web.uri,
+            uri: chunk.web.uri
+          });
         }
-      }
+      });
     }
 
-    return text;
+    return { text, sources };
   } catch (error: any) {
     console.error("Gemini Text Error:", error);
     throw error;

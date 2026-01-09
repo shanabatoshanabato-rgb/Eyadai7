@@ -94,7 +94,8 @@ export const ChatPage: React.FC = () => {
       const modelMsg: Message = {
         id: (Date.now() + 1).toString(),
         role: 'model',
-        text: aiResponse,
+        // FIX: Access .text from aiResponse instead of assigning the whole object
+        text: aiResponse.text,
         timestamp: Date.now()
       };
       setMessages(prev => [...prev, modelMsg]);

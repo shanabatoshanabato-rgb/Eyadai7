@@ -106,11 +106,12 @@ export const HomeworkPage: React.FC = () => {
         image: image || undefined
       });
 
+      // FIX: Access response.text property instead of treating response object as string
       // Attempt to extract JSON from the response text
-      const startIdx = response.indexOf('{');
-      const endIdx = response.lastIndexOf('}');
+      const startIdx = response.text.indexOf('{');
+      const endIdx = response.text.lastIndexOf('}');
       if (startIdx !== -1 && endIdx !== -1) {
-        const jsonStr = response.substring(startIdx, endIdx + 1);
+        const jsonStr = response.text.substring(startIdx, endIdx + 1);
         const parsed = JSON.parse(jsonStr);
         setSolution(parsed);
       } else {
@@ -248,7 +249,7 @@ export const HomeworkPage: React.FC = () => {
           )}
 
           {solution && (
-            <div className="space-y-8 animate-in fade-in slide-in-from-right-12 duration-700">
+            <div className="space-y-8 animate-in fade-in slide-in-from-right-12 duration-700 pb-20">
               <div className="bg-white dark:bg-slate-900 rounded-[2.5rem] p-8 border-l-8 border-l-blue-600 border border-slate-200 dark:border-slate-800 shadow-xl">
                 <div className="flex items-center gap-3 mb-4">
                   <Sparkles className="text-blue-600 w-6 h-6" />
@@ -295,7 +296,7 @@ export const HomeworkPage: React.FC = () => {
                     <Lightbulb className="w-6 h-6" />
                     <span className="font-black uppercase tracking-widest text-xs">{t('proTip')}</span>
                   </div>
-                  <p className="text-amber-800 dark:text-amber-200 font-bold leading-relaxed italic">"{solution.tip}"</p>
+                  <p className="text-amber-800 dark:text-emerald-200 font-bold leading-relaxed italic">"{solution.tip}"</p>
                 </div>
               </div>
             </div>
