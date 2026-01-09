@@ -1,0 +1,7 @@
+{
+  "name": "Eyad AI",
+  "description": "An all-in-one AI partner for education, productivity, and real-time voice communication.",
+  "requestFramePermissions": [
+    "microphone"
+  ]
+}
