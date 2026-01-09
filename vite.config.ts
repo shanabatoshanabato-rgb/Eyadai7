@@ -5,10 +5,13 @@ import react from '@vitejs/plugin-react';
 export default defineConfig({
   plugins: [react()],
   define: {
-    'process.env.API_KEY': JSON.stringify(process.env.API_KEY)
+    'process.env.API_KEY': JSON.stringify(process.env.API_KEY || '')
+  },
+  server: {
+    port: 3000
   },
   build: {
-    chunkSizeWarningLimit: 2000, // حل مشكلة التحذير الخاص بحجم الملفات في Vercel
+    chunkSizeWarningLimit: 2000,
     rollupOptions: {
       output: {
         manualChunks: {

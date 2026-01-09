@@ -20,6 +20,7 @@ interface GenerateOptions {
   systemInstruction?: string;
   image?: { data: string; mimeType: string };
   useSearch?: boolean;
+  responseMimeType?: string;
 }
 
 export const generateText = async (prompt: string, options?: GenerateOptions): Promise<string> => {
@@ -40,6 +41,10 @@ export const generateText = async (prompt: string, options?: GenerateOptions): P
       systemInstruction: options?.systemInstruction || "You are Eyad AI, a helpful assistant."
     };
 
+    if (options?.responseMimeType) {
+      config.responseMimeType = options.responseMimeType;
+    }
+
     if (options?.useSearch) {
       config.tools = [{ googleSearch: {} }];
     }
@@ -54,7 +59,7 @@ export const generateText = async (prompt: string, options?: GenerateOptions): P
     
     // إضافة المصادر إذا وجدت (Google Search Grounding)
     const chunks = response.candidates?.[0]?.groundingMetadata?.groundingChunks;
-    if (chunks && chunks.length > 0) {
+    if (chunks && chunks.length > 0 && !options?.responseMimeType) {
       text += "\n\n### المصادر والمراجع:\n";
       chunks.forEach((chunk: any) => {
         if (chunk.web?.uri) {
