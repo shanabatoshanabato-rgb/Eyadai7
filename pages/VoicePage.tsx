@@ -5,7 +5,8 @@ import {
   StopCircle, 
   Mic, 
   Zap,
-  Globe
+  Globe,
+  Loader2
 } from 'lucide-react';
 import { getAI, decode, decodeAudioData, encode } from '../services/geminiService';
 import { MODELS, VOICE_MAP, DEFAULT_SETTINGS } from '../constants';
@@ -14,6 +15,7 @@ import { useTranslation } from '../translations';
 
 export const VoicePage: React.FC = () => {
   const [isCalling, setIsCalling] = useState(false);
+  const [isConnecting, setIsConnecting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   
   const sessionRef = useRef<any>(null);
@@ -28,6 +30,7 @@ export const VoicePage: React.FC = () => {
 
   const stopEverything = async () => {
     setIsCalling(false);
+    setIsConnecting(false);
 
     if (sessionRef.current) {
       try { sessionRef.current.close(); } catch(e) {}
@@ -80,6 +83,7 @@ export const VoicePage: React.FC = () => {
   const startCall = async () => {
     try {
       setError(null);
+      setIsConnecting(true);
       const ai = getAI();
       
       const inputCtx = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 16000 });
@@ -98,12 +102,13 @@ export const VoicePage: React.FC = () => {
         model: MODELS.LIVE,
         callbacks: {
           onopen: () => {
+            setIsConnecting(false);
+            setIsCalling(true);
             if (!inputContextRef.current || !streamRef.current) return;
             const source = inputContextRef.current.createMediaStreamSource(streamRef.current);
             const processor = inputContextRef.current.createScriptProcessor(2048, 1, 1);
             processorRef.current = processor;
             
-            // Following guideline: Use sessionPromise.then to send data to avoid stale closures
             processor.onaudioprocess = (e) => {
               const inputData = e.inputBuffer.getChannelData(0);
               const int16 = new Int16Array(inputData.length);
@@ -132,6 +137,12 @@ export const VoicePage: React.FC = () => {
               sourcesRef.current.add(source);
               source.onended = () => { sourcesRef.current.delete(source); source.disconnect(); };
             }
+
+            if (message.serverContent?.interrupted) {
+              sourcesRef.current.forEach(s => { try { s.stop(); } catch(e) {} });
+              sourcesRef.current.clear();
+              nextStartTimeRef.current = 0;
+            }
           },
           onclose: () => stopEverything(),
           onerror: () => stopEverything(),
@@ -140,52 +151,83 @@ export const VoicePage: React.FC = () => {
           tools: [{ googleSearch: {} }],
           responseModalities: [Modality.AUDIO],
           speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: apiVoiceName } } },
-          systemInstruction: `You are Eyad AI, a ultra-high-performance voice assistant. 
-          1. SPEED: Respond instantly. Keep answers under 15 words whenever possible.
-          2. LANGUAGE: Detect user language immediately. ALWAYS respond in the EXACT same language as the user.
-          3. ACCURACY: You have access to Google Search. Use it to provide factual, real-time answers when needed.
-          4. STYLE: No fillers. Friendly but professional.`
+          systemInstruction: `You are Eyad AI, a professional and extremely fast voice assistant.
+          CORE MISSION:
+          1. SPEED: Start responding the millisecond the user stops talking. Avoid any lag.
+          2. RESPONSE LENGTH: Provide moderate-length answers. Not one-word answers, and not long speeches. Aim for 2 to 4 clear, high-quality sentences (approx 30-50 words).
+          3. ACCURACY: Use Google Search for every factual query to ensure you are 100% correct.
+          4. LANGUAGE: Automatically match the user's language and dialect (e.g., if they speak Egyptian Arabic, respond in Egyptian Arabic).
+          5. STYLE: Be helpful, direct, and avoid conversational fillers like "I am searching for you" or "Give me a moment". Just answer.`
         }
       });
 
-      setIsCalling(true);
       sessionRef.current = await sessionPromise;
     } catch (err: any) {
-      setError("Microphone error");
+      setError("Microphone error or connection failed");
       stopEverything();
     }
   };
 
   return (
     <div className="flex-grow flex flex-col items-center justify-center p-4 bg-slate-900 overflow-hidden relative">
+      {/* Background Glow Effect */}
+      <div className={`absolute inset-0 transition-opacity duration-1000 ${isCalling ? 'opacity-20' : 'opacity-0'}`}>
+        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[500px] h-[500px] bg-blue-600 rounded-full blur-[120px] animate-pulse"></div>
+      </div>
+
       <div className="max-w-md w-full text-center relative z-10 space-y-12">
         <div className="space-y-4">
           <div className="inline-flex items-center gap-2 px-4 py-2 bg-blue-500/10 rounded-full text-blue-400 text-xs font-black uppercase tracking-widest border border-blue-500/20">
-            <Zap className="w-3.5 h-3.5 fill-blue-400" /> Ultra-Fast + <Globe className="w-3.5 h-3.5 ml-1" /> Web
+            <Zap className="w-3.5 h-3.5 fill-blue-400" /> Extreme Low Latency
           </div>
           <h1 className="text-4xl font-black text-white">{t('voice')}</h1>
           {error && <p className="text-red-400 font-bold">{error}</p>}
-          {!error && <p className="text-slate-400">{t('voiceDesc')}</p>}
+          {!error && <p className="text-slate-400">{isCalling ? "Eyad is listening..." : t('voiceDesc')}</p>}
         </div>
 
-        <div className={`w-48 h-48 mx-auto rounded-full border-4 border-slate-800 flex items-center justify-center p-4 transition-all duration-700 ${isCalling ? 'scale-110 border-blue-500/50 shadow-[0_0_50px_rgba(59,130,246,0.3)]' : 'scale-100'}`}>
+        <div className={`w-56 h-56 mx-auto rounded-full border-4 flex items-center justify-center p-4 transition-all duration-700 relative ${
+          isCalling 
+            ? 'scale-110 border-blue-500 shadow-[0_0_80px_rgba(59,130,246,0.4)]' 
+            : isConnecting 
+              ? 'border-slate-700 animate-pulse'
+              : 'border-slate-800 scale-100'
+        }`}>
           {isCalling ? (
-            <div className="flex items-center gap-1.5 h-16">
-              {[1, 2, 3, 4, 5].map(i => (
-                <div key={i} className="w-2 bg-blue-500 rounded-full animate-pulse" style={{ height: '100%', animationDelay: `${i * 0.1}s` }} />
+            <div className="flex items-center gap-2 h-20">
+              {[1, 2, 3, 4, 5, 6].map(i => (
+                <div 
+                  key={i} 
+                  className="w-2.5 bg-blue-500 rounded-full animate-bounce" 
+                  style={{ 
+                    height: '100%', 
+                    animationDuration: '0.6s',
+                    animationDelay: `${i * 0.1}s` 
+                  }} 
+                />
               ))}
             </div>
+          ) : isConnecting ? (
+            <Loader2 className="w-16 h-16 text-blue-500 animate-spin" />
           ) : (
             <PhoneCall className="w-16 h-16 text-slate-600" />
+          )}
+          
+          {isCalling && (
+            <div className="absolute -inset-4 border border-blue-500/30 rounded-full animate-ping"></div>
           )}
         </div>
 
         <button
-          onClick={isCalling ? stopEverything : startCall}
-          className={`px-12 py-5 rounded-[2rem] font-black text-xl transition-all flex items-center gap-4 mx-auto ${isCalling ? 'bg-red-600 text-white shadow-red-600/40' : 'bg-blue-600 text-white shadow-blue-600/40'}`}
+          onClick={isCalling || isConnecting ? stopEverything : startCall}
+          disabled={isConnecting && !isCalling}
+          className={`px-12 py-5 rounded-[2.5rem] font-black text-xl transition-all flex items-center gap-4 mx-auto shadow-2xl active:scale-95 ${
+            isCalling || isConnecting 
+              ? 'bg-red-600 text-white shadow-red-600/30 hover:bg-red-700' 
+              : 'bg-blue-600 text-white shadow-blue-600/30 hover:bg-blue-700'
+          }`}
         >
-          {isCalling ? <StopCircle /> : <Mic />}
-          {isCalling ? t('endCall') : t('startVoice')}
+          {isCalling || isConnecting ? <StopCircle className="w-6 h-6" /> : <Mic className="w-6 h-6" />}
+          {isConnecting && !isCalling ? "Connecting..." : isCalling ? t('endCall') : t('startVoice')}
         </button>
       </div>
     </div>
