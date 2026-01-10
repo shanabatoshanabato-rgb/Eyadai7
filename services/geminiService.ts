@@ -10,6 +10,7 @@ const getApiKey = () => {
   return key;
 };
 
+// Create a new GoogleGenAI instance right before making an API call to ensure it always uses the most up-to-date API key
 export const getAI = () => {
   const apiKey = getApiKey();
   if (!apiKey) throw new Error("API_KEY_MISSING");
@@ -30,48 +31,48 @@ export interface AIResponse {
 
 /**
  * Robust JSON extraction utility.
- * Handles markdown blocks, extra text, and malformed prefixes.
+ * Cleans markdown, handles conversational prefixes, and extracts valid JSON objects/arrays.
  */
 export const extractJson = (text: string) => {
   try {
-    // 1. Clean markdown formatting
-    let cleanText = text.replace(/```json/gi, '').replace(/```/g, '').trim();
+    // 1. Remove markdown code blocks if they exist
+    let cleaned = text.replace(/```json/gi, '').replace(/```/g, '').trim();
     
-    // 2. Find the bounds of the JSON object
-    const start = cleanText.indexOf('{');
-    const end = cleanText.lastIndexOf('}');
+    // 2. Find the first '{' and last '}'
+    const start = cleaned.indexOf('{');
+    const end = cleaned.lastIndexOf('}');
     
     if (start === -1 || end === -1) {
-      // Try array format if object fails
-      const arrStart = cleanText.indexOf('[');
-      const arrEnd = cleanText.lastIndexOf(']');
+      // Check for array format if object fails
+      const arrStart = cleaned.indexOf('[');
+      const arrEnd = cleaned.lastIndexOf(']');
       if (arrStart !== -1 && arrEnd !== -1) {
-        return JSON.parse(cleanText.substring(arrStart, arrEnd + 1));
+        return JSON.parse(cleaned.substring(arrStart, arrEnd + 1));
       }
       throw new Error("NO_JSON_FOUND");
     }
     
-    const jsonStr = cleanText.substring(start, end + 1);
+    const jsonStr = cleaned.substring(start, end + 1);
     return JSON.parse(jsonStr);
   } catch (e) {
-    console.error("Critical Parse Error:", e, "Input:", text);
+    console.error("Critical JSON Parse Error:", e, "Input Text:", text);
     throw new Error("FAILED_TO_PARSE_JSON");
   }
 };
 
 const TEXT_MODELS_FALLBACK = [
   'gemini-3-flash-preview',
-  'gemini-2.5-flash-latest',
+  'gemini-flash-latest',
   'gemini-flash-lite-latest'
 ];
 
 export const generateText = async (prompt: string, options?: GenerateOptions): Promise<AIResponse> => {
   let lastError: any = null;
   
-  // Use 2.5 flash specifically for images as it's currently more stable for multimodal Vercel payloads
+  // Use recommended model names from guidelines
   const modelsToTry = options?.image 
-    ? ['gemini-2.5-flash-latest', 'gemini-3-flash-preview'] 
-    : (options?.useSearch ? ['gemini-3-flash-preview', 'gemini-2.5-flash-latest'] : TEXT_MODELS_FALLBACK);
+    ? ['gemini-3-flash-preview', 'gemini-flash-latest'] 
+    : (options?.useSearch ? ['gemini-3-flash-preview', 'gemini-flash-latest'] : TEXT_MODELS_FALLBACK);
 
   for (const modelName of modelsToTry) {
     try {
@@ -88,8 +89,8 @@ export const generateText = async (prompt: string, options?: GenerateOptions): P
       }
 
       const config: any = {
-        systemInstruction: options?.systemInstruction || "You are Eyad AI, a professional engineer and tutor.",
-        thinkingConfig: { thinkingBudget: 0 }
+        systemInstruction: options?.systemInstruction || "You are Eyad AI, a professional tutor.",
+        thinkingConfig: { thinkingBudget: 0 } // Disable thinking for immediate output to avoid timeouts
       };
 
       if (options?.responseMimeType && !options?.useSearch) {
@@ -106,6 +107,7 @@ export const generateText = async (prompt: string, options?: GenerateOptions): P
         config
       });
 
+      // Use .text property as per instructions
       const text = response.text || '';
       const sources: { title: string; uri: string }[] = [];
 
@@ -123,7 +125,7 @@ export const generateText = async (prompt: string, options?: GenerateOptions): P
 
       return { text, sources };
     } catch (error: any) {
-      console.error(`Model ${modelName} encountered an error:`, error.message);
+      console.warn(`Model ${modelName} failed, trying next...`, error.message);
       lastError = error;
       if (error.message?.includes('429') || error.status === 429) continue; 
       throw error;
