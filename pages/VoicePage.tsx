@@ -1,5 +1,5 @@
 
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { 
   PhoneCall, 
   StopCircle, 
@@ -15,30 +15,83 @@ import { useTranslation } from '../translations';
 export const VoicePage: React.FC = () => {
   const [isCalling, setIsCalling] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  
+  // Refs for managing resources
   const sessionRef = useRef<any>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
+  const inputContextRef = useRef<AudioContext | null>(null);
+  const streamRef = useRef<MediaStream | null>(null);
   const nextStartTimeRef = useRef<number>(0);
   const sourcesRef = useRef<Set<AudioBufferSourceNode>>(new Set());
+  
   const t = useTranslation();
+
+  // Cleanup function to ensure everything stops when leaving the page
+  useEffect(() => {
+    return () => {
+      stopEverything();
+    };
+  }, []);
+
+  const stopEverything = () => {
+    // 1. Close the Gemini Session
+    if (sessionRef.current) {
+      try { sessionRef.current.close(); } catch(e) { console.warn("Session close error", e); }
+      sessionRef.current = null;
+    }
+
+    // 2. Stop Microphone Tracks (Hardware)
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach(track => track.stop());
+      streamRef.current = null;
+    }
+
+    // 3. Stop All Playing Audio Sources
+    sourcesRef.current.forEach(source => {
+      try { source.stop(); } catch(e) {}
+    });
+    sourcesRef.current.clear();
+
+    // 4. Close Audio Contexts (Silence Output)
+    if (audioContextRef.current) {
+      try { audioContextRef.current.close(); } catch(e) {}
+      audioContextRef.current = null;
+    }
+    if (inputContextRef.current) {
+      try { inputContextRef.current.close(); } catch(e) {}
+      inputContextRef.current = null;
+    }
+    
+    // Reset Timer
+    nextStartTimeRef.current = 0;
+  };
+
+  const endCall = () => {
+    stopEverything();
+    setIsCalling(false);
+  };
 
   const startCall = async () => {
     try {
       setError(null);
-      setIsCalling(true);
       
       const ai = getAI();
       
-      // تهيئة سياق الصوت
+      // Initialize Contexts
       const inputCtx = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 16000 });
       const outputCtx = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 24000 });
       
-      // استئناف السياق (مهم للمتصفحات)
+      // Store contexts to refs for cleanup
+      inputContextRef.current = inputCtx;
+      audioContextRef.current = outputCtx;
+      
+      // Resume contexts (browser policy)
       await inputCtx.resume();
       await outputCtx.resume();
       
-      audioContextRef.current = outputCtx;
-      
+      // Get Microphone Stream
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      streamRef.current = stream;
 
       const preferredVoice = localStorage.getItem('eyad-ai-voice') || DEFAULT_SETTINGS.voiceName;
       const apiVoiceName = VOICE_MAP[preferredVoice] || 'Fenrir';
@@ -47,9 +100,15 @@ export const VoicePage: React.FC = () => {
         model: MODELS.LIVE,
         callbacks: {
           onopen: () => {
-            const source = inputCtx.createMediaStreamSource(stream);
-            const processor = inputCtx.createScriptProcessor(4096, 1, 1);
+            // Check if context still exists (user might have left)
+            if (!inputContextRef.current) return;
+
+            const source = inputContextRef.current.createMediaStreamSource(stream);
+            const processor = inputContextRef.current.createScriptProcessor(4096, 1, 1);
+            
             processor.onaudioprocess = (e) => {
+              if (!sessionRef.current) return; // Don't send if closed
+
               const inputData = e.inputBuffer.getChannelData(0);
               const int16 = new Int16Array(inputData.length);
               for (let i = 0; i < inputData.length; i++) {
@@ -59,34 +118,62 @@ export const VoicePage: React.FC = () => {
                 data: encode(new Uint8Array(int16.buffer)),
                 mimeType: 'audio/pcm;rate=16000',
               };
-              sessionPromise.then(session => session.sendRealtimeInput({ media: pcmBlob }));
+              
+              sessionPromise.then(session => {
+                if (sessionRef.current) {
+                   session.sendRealtimeInput({ media: pcmBlob });
+                }
+              });
             };
+            
             source.connect(processor);
-            processor.connect(inputCtx.destination);
+            processor.connect(inputContextRef.current.destination);
           },
           onmessage: async (message: any) => {
+            // Guard clauses to prevent processing if call ended
+            if (!audioContextRef.current || !sessionRef.current) return;
+
             const audioData = message.serverContent?.modelTurn?.parts?.[0]?.inlineData?.data;
             if (audioData) {
-              const buffer = await decodeAudioData(decode(audioData), outputCtx, 24000, 1);
-              const source = outputCtx.createBufferSource();
-              source.buffer = buffer;
-              source.connect(outputCtx.destination);
-              nextStartTimeRef.current = Math.max(nextStartTimeRef.current, outputCtx.currentTime);
-              source.start(nextStartTimeRef.current);
-              nextStartTimeRef.current += buffer.duration;
-              sourcesRef.current.add(source);
-              source.onended = () => sourcesRef.current.delete(source);
+              try {
+                const buffer = await decodeAudioData(decode(audioData), audioContextRef.current, 24000, 1);
+                
+                // Double check context before creating source
+                if (!audioContextRef.current) return;
+                
+                const source = audioContextRef.current.createBufferSource();
+                source.buffer = buffer;
+                source.connect(audioContextRef.current.destination);
+                
+                nextStartTimeRef.current = Math.max(nextStartTimeRef.current, audioContextRef.current.currentTime);
+                source.start(nextStartTimeRef.current);
+                nextStartTimeRef.current += buffer.duration;
+                
+                sourcesRef.current.add(source);
+                source.onended = () => sourcesRef.current.delete(source);
+              } catch (e) {
+                console.error("Error decoding/playing audio", e);
+              }
             }
+            
             if (message.serverContent?.interrupted) {
               sourcesRef.current.forEach(s => s.stop());
               sourcesRef.current.clear();
-              nextStartTimeRef.current = 0;
+              if (audioContextRef.current) {
+                nextStartTimeRef.current = audioContextRef.current.currentTime;
+              }
             }
           },
-          onclose: () => endCall(),
+          onclose: () => {
+            // Only trigger cleanup if we think we are still calling
+            // to avoid infinite loops or state update on unmount
+            if (sessionRef.current) {
+                endCall();
+            }
+          },
           onerror: (e) => {
             console.error("Voice Session Error:", e);
-            setError("Session failed. Please verify your API Key in Settings.");
+            setError("Connection disrupted. Please try again.");
             endCall();
           },
         },
@@ -103,20 +190,22 @@ export const VoicePage: React.FC = () => {
         }
       });
 
-      sessionPromise.then(session => { sessionRef.current = session; });
+      // Set state and ref
+      setIsCalling(true);
+      sessionPromise.then(session => { 
+        // If user cancelled while connecting
+        if (!isCalling && !streamRef.current) {
+            session.close();
+            return;
+        }
+        sessionRef.current = session; 
+      });
+
     } catch (err: any) {
       console.error(err);
-      setError(err.message === "API_KEY_MISSING" ? "API Key is missing or invalid in Vercel settings." : "Microphone or connection error");
+      setError(err.message === "API_KEY_MISSING" ? "API Key is missing." : "Microphone or connection error");
       endCall();
     }
-  };
-
-  const endCall = () => {
-    sessionRef.current?.close();
-    sessionRef.current = null;
-    setIsCalling(false);
-    sourcesRef.current.forEach(s => s.stop());
-    sourcesRef.current.clear();
   };
 
   return (
