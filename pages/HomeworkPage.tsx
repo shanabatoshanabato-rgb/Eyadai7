@@ -1,5 +1,5 @@
 
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useMemo } from 'react';
 import { 
   BookOpen, 
   HelpCircle, 
@@ -13,7 +13,13 @@ import {
   Search,
   Zap,
   Lightbulb,
-  Repeat
+  Repeat,
+  PenTool,
+  Atom,
+  FlaskConical,
+  Microscope,
+  ScrollText,
+  Calculator
 } from 'lucide-react';
 import { generateText } from '../services/geminiService';
 import { useTranslation } from '../translations';
@@ -25,7 +31,6 @@ export const HomeworkPage: React.FC = () => {
   const [selectedSubject, setSelectedSubject] = useState('math');
   const [tutorType, setTutorType] = useState('friendly');
   const [isSolving, setIsSolving] = useState(false);
-  const [solveStep, setSolveStep] = useState<string | null>(null);
   const [solution, setSolution] = useState<{
     summary: string;
     steps: string[];
@@ -35,21 +40,26 @@ export const HomeworkPage: React.FC = () => {
   const [image, setImage] = useState<{data: string, mimeType: string} | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const subjects = [
-    { id: 'math', label: t('math'), icon: 'π', color: 'bg-blue-500' },
-    { id: 'physics', label: t('physics'), icon: '⚛', color: 'bg-indigo-500' },
-    { id: 'chemistry', label: t('chemistry'), icon: '🧪', color: 'bg-green-500' },
-    { id: 'science', label: t('science'), icon: '🧬', color: 'bg-emerald-500' },
-    { id: 'history', label: t('history'), icon: '📜', color: 'bg-amber-600' },
-    { id: 'arabic', label: t('arabic'), icon: 'ض', color: 'bg-red-500' },
-    { id: 'english', label: t('english'), icon: 'Abc', color: 'bg-orange-500' },
-  ];
+  // Determine current language and direction
+  const currentLang = localStorage.getItem('eyad-ai-lang') || Language.EN;
+  const isRTL = currentLang === Language.AR || currentLang === Language.EG;
 
-  const tutors = [
-    { id: 'friendly', label: t('tutorFriendly'), icon: Sparkles },
-    { id: 'strict', label: t('tutorStrict'), icon: GraduationCap },
-    { id: 'genius', label: t('tutorGenius'), icon: Brain },
-  ];
+  // Memoize subjects to react to language changes
+  const subjects = useMemo(() => [
+    { id: 'math', label: t('math'), icon: Calculator, color: 'bg-blue-500' },
+    { id: 'physics', label: t('physics'), icon: Atom, color: 'bg-indigo-500' },
+    { id: 'chemistry', label: t('chemistry'), icon: FlaskConical, color: 'bg-green-500' },
+    { id: 'science', label: t('science'), icon: Microscope, color: 'bg-emerald-500' },
+    { id: 'history', label: t('history'), icon: ScrollText, color: 'bg-amber-500' },
+    { id: 'literature', label: t('literature'), icon: BookOpen, color: 'bg-rose-500' },
+  ], [t]);
+
+  // Memoize tutor styles
+  const tutorTypes = useMemo(() => [
+    { id: 'friendly', label: t('styleFriendly'), icon: Sparkles },
+    { id: 'academic', label: t('styleAcademic'), icon: GraduationCap },
+    { id: 'humorous', label: t('styleHumorous'), icon: Zap },
+  ], [t]);
 
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -63,241 +73,223 @@ export const HomeworkPage: React.FC = () => {
     }
   };
 
-  const handleSolve = async (extraPrompt: string = "") => {
+  const handleSolve = async () => {
     if (!question.trim() && !image) return;
     setIsSolving(true);
     setSolution(null);
-    
-    // Get current UI language to tell the AI to use it
-    const currentLang = localStorage.getItem('eyad-ai-lang') || Language.EN;
-    const langNames: Record<string, string> = {
-      [Language.EN]: "English",
-      [Language.AR]: "Standard Arabic",
-      [Language.EG]: "Egyptian Arabic (Ammiya)",
-      [Language.FR]: "French",
-      [Language.ES]: "Spanish"
-    };
-    const targetLangName = langNames[currentLang] || "English";
 
-    setSolveStep(image ? t('analyzingImage') : t('buildingLogic'));
-    await new Promise(r => setTimeout(r, 1200));
-    setSolveStep(t('finalizingSolution'));
+    const prompt = `
+      You are Eyad AI, a professional tutor.
+      Subject: ${selectedSubject}
+      Style: ${tutorType}
+      Question: ${question}
+      Language: ${currentLang} (IMPORTANT: Your response MUST be in this language)
+      
+      Solve this problem step-by-step.
+      Return ONLY valid JSON in this exact format:
+      {
+        "summary": "Direct final answer/summary",
+        "steps": ["Step 1 detailed", "Step 2 detailed"],
+        "theory": "The underlying concept or formula used",
+        "tip": "A helpful tip or trick to remember this"
+      }
+    `;
 
     try {
-      const prompt = `Solve this ${selectedSubject} question. 
-      Tutor Personality: ${tutorType}. 
-      Target Language: ${targetLangName}.
-      ${extraPrompt ? "Special instruction: " + extraPrompt : ""}
-      Question: "${question || "Look at the attached image and solve the problem inside it."}"
-      
-      CRITICAL: You MUST write all the CONTENT of the JSON values in ${targetLangName}. 
-      If the language is Egyptian Arabic, be very friendly and use common Egyptian expressions.
-      
-      Respond ONLY with this JSON structure:
-      {
-        "summary": "Short explanation of the problem in ${targetLangName}",
-        "steps": ["Step 1 in ${targetLangName}", "Step 2 in ${targetLangName}", "Final result in ${targetLangName}"],
-        "theory": "The scientific rule/concept explained in ${targetLangName}",
-        "tip": "A helpful advice from Eyad in ${targetLangName}"
-      }`;
-
-      const response = await generateText(prompt, { 
-        systemInstruction: `You are an expert AI teacher named Eyad. You specialize in ${selectedSubject}. You always respond in valid JSON using the requested language: ${targetLangName}.`,
-        image: image || undefined
+      const res = await generateText(prompt, { 
+        image: image || undefined,
+        systemInstruction: "You are a JSON-only response bot for homework help."
       });
-
-      // FIX: Access response.text property instead of treating response object as string
-      // Attempt to extract JSON from the response text
-      const startIdx = response.text.indexOf('{');
-      const endIdx = response.text.lastIndexOf('}');
-      if (startIdx !== -1 && endIdx !== -1) {
-        const jsonStr = response.text.substring(startIdx, endIdx + 1);
-        const parsed = JSON.parse(jsonStr);
-        setSolution(parsed);
-      } else {
-        throw new Error("Invalid response format");
-      }
-    } catch (err) {
-      console.error(err);
+      
+      const text = res.text.replace(/```json/g, '').replace(/```/g, '').trim();
+      const json = JSON.parse(text);
+      setSolution(json);
+    } catch (e) {
+      console.error(e);
+      // Fallback response if JSON fails
       setSolution({
-        summary: currentLang === Language.AR || currentLang === Language.EG ? "عذراً، حدث خطأ أثناء معالجة الحل." : "Sorry, an error occurred while processing the solution.",
-        steps: [currentLang === Language.AR || currentLang === Language.EG ? "برجاء المحاولة مرة أخرى أو التأكد من وضوح السؤال." : "Please try again or ensure the question is clear."],
-        theory: "",
-        tip: ""
+        summary: "Error processing request / حدث خطأ",
+        steps: ["Please try again / حاول مرة أخرى"],
+        theory: "System Error",
+        tip: "Check your connection"
       });
     } finally {
       setIsSolving(false);
-      setSolveStep(null);
     }
   };
 
   return (
-    <div className="max-w-6xl mx-auto space-y-12 p-4 md:p-12">
-      {/* Header & Intro */}
+    <div 
+      className="max-w-6xl mx-auto p-4 md:p-10 space-y-8 min-h-screen" 
+      dir={isRTL ? 'rtl' : 'ltr'}
+    >
+      {/* Header */}
       <div className="text-center space-y-4">
         <div className="inline-flex items-center gap-2 px-4 py-2 bg-blue-50 dark:bg-blue-900/30 rounded-full text-blue-600 dark:text-blue-400 text-xs font-black uppercase tracking-widest border border-blue-100 dark:border-blue-800">
-          <Zap className="w-3.5 h-3.5 fill-blue-600" /> AI Education Hub
+          <GraduationCap className="w-4 h-4" /> {t('homeworkHelp')}
         </div>
-        <h2 className="text-5xl md:text-6xl font-black flex items-center justify-center gap-4 dark:text-white tracking-tighter">
+        <h1 className="text-4xl md:text-5xl font-black dark:text-white tracking-tighter">
           {t('homework')}
-        </h2>
-        <p className="text-slate-500 dark:text-slate-400 font-medium text-lg max-w-xl mx-auto">
-          {t('heroDesc')}
+        </h1>
+        <p className="text-slate-500 dark:text-slate-400 max-w-2xl mx-auto font-medium text-lg">
+          {t('solve')}
         </p>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-12">
-        {/* Left: Inputs */}
-        <div className="lg:col-span-5 space-y-8">
-          <section className="space-y-4">
-            <label className="text-xs font-black uppercase tracking-[0.2em] text-slate-400 px-1">{t('selectSubject')}</label>
-            <div className="grid grid-cols-3 sm:grid-cols-4 gap-3">
-              {subjects.map(s => (
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
+        {/* Sidebar / Options */}
+        <div className="lg:col-span-4 space-y-6">
+          
+          <div className="bg-white dark:bg-slate-900 p-6 rounded-[2rem] border border-slate-200 dark:border-slate-800 shadow-lg">
+            <h3 className="text-sm font-black uppercase tracking-widest text-slate-400 mb-4 px-1">{t('subjectLabel')}</h3>
+            <div className="grid grid-cols-2 gap-3">
+              {subjects.map((sub) => (
                 <button
-                  key={s.id}
-                  onClick={() => setSelectedSubject(s.id)}
-                  className={`flex flex-col items-center gap-3 p-4 rounded-3xl border-2 transition-all group ${
-                    selectedSubject === s.id 
-                      ? 'border-blue-600 bg-blue-600 text-white shadow-xl shadow-blue-600/20' 
-                      : 'border-slate-100 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-400 hover:border-blue-200'
+                  key={sub.id}
+                  onClick={() => setSelectedSubject(sub.id)}
+                  className={`p-4 rounded-2xl border-2 transition-all flex flex-col items-center gap-2 text-center ${
+                    selectedSubject === sub.id
+                    ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400'
+                    : 'border-slate-100 dark:border-slate-800 text-slate-500 dark:text-slate-400 hover:border-blue-200'
                   }`}
                 >
-                  <span className={`w-10 h-10 rounded-2xl flex items-center justify-center text-xl font-black ${selectedSubject === s.id ? 'bg-white/20' : s.color + ' text-white'}`}>
-                    {s.icon}
-                  </span>
-                  <span className="text-[10px] font-black uppercase tracking-tight">{s.label}</span>
+                  <sub.icon className={`w-6 h-6 ${selectedSubject === sub.id ? 'text-blue-600' : 'text-slate-400'}`} />
+                  <span className="text-xs font-bold">{sub.label}</span>
                 </button>
               ))}
             </div>
-          </section>
+          </div>
 
-          <section className="space-y-4">
-            <label className="text-xs font-black uppercase tracking-[0.2em] text-slate-400 px-1">{t('selectTutor')}</label>
-            <div className="flex gap-3">
-              {tutors.map(tut => (
+          <div className="bg-white dark:bg-slate-900 p-6 rounded-[2rem] border border-slate-200 dark:border-slate-800 shadow-lg">
+            <h3 className="text-sm font-black uppercase tracking-widest text-slate-400 mb-4 px-1">{t('tutorLabel')}</h3>
+            <div className="space-y-2">
+              {tutorTypes.map((type) => (
                 <button
-                  key={tut.id}
-                  onClick={() => setTutorType(tut.id)}
-                  className={`flex-grow flex items-center gap-3 p-4 rounded-2xl border-2 transition-all ${
-                    tutorType === tut.id 
-                      ? 'border-blue-600 bg-blue-50 dark:bg-blue-900/20 text-blue-600' 
-                      : 'border-slate-100 dark:border-slate-800 text-slate-400'
+                  key={type.id}
+                  onClick={() => setTutorType(type.id)}
+                  className={`w-full flex items-center gap-3 p-3 rounded-xl border-2 transition-all font-bold text-sm ${
+                    tutorType === type.id
+                    ? 'border-indigo-500 bg-indigo-50 dark:bg-indigo-900/20 text-indigo-600 dark:text-indigo-400'
+                    : 'border-slate-100 dark:border-slate-800 text-slate-500 dark:text-slate-400 hover:border-indigo-200'
                   }`}
                 >
-                  <tut.icon className="w-5 h-5" />
-                  <span className="text-xs font-bold">{tut.label}</span>
+                  <type.icon className="w-4 h-4" />
+                  {type.label}
                 </button>
               ))}
             </div>
-          </section>
-
-          <div className="bg-white dark:bg-slate-900 rounded-[2.5rem] p-8 border border-slate-200 dark:border-slate-800 shadow-xl space-y-6">
-            <div className="relative">
-              <textarea
-                value={question}
-                onChange={(e) => setQuestion(e.target.value)}
-                placeholder={t('hwPlaceholder')}
-                className="w-full p-6 bg-slate-50 dark:bg-slate-800 border-none rounded-3xl outline-none focus:ring-4 focus:ring-blue-600/10 min-h-[160px] dark:text-white font-medium resize-none transition-all"
-              />
-              <div className="absolute bottom-4 right-4 flex gap-2">
-                <input type="file" ref={fileInputRef} onChange={handleImageUpload} accept="image/*" className="hidden" />
-                <button 
-                  onClick={() => fileInputRef.current?.click()}
-                  className={`p-4 rounded-2xl transition-all ${image ? 'bg-blue-600 text-white shadow-lg' : 'bg-white dark:bg-slate-700 text-slate-400 border border-slate-200 dark:border-slate-600'}`}
-                >
-                  {image ? <CheckCircle2 className="w-6 h-6" /> : <ImageIcon className="w-6 h-6" />}
-                </button>
-              </div>
-            </div>
-
-            {image && (
-              <div className="flex items-center justify-between p-4 bg-blue-50 dark:bg-blue-900/20 rounded-2xl border border-blue-100 dark:border-blue-800/50">
-                <div className="flex items-center gap-3 text-blue-600 dark:text-blue-400 font-bold text-sm">
-                  <ImageIcon className="w-5 h-5" /> {t('imageAttached')}
-                </div>
-                <button onClick={() => setImage(null)} className="p-2 hover:bg-blue-100 dark:hover:bg-blue-800 rounded-lg transition-colors"><X className="w-4 h-4 text-blue-600" /></button>
-              </div>
-            )}
-
-            <button
-              onClick={() => handleSolve()}
-              disabled={isSolving || (!question.trim() && !image)}
-              className="w-full py-6 bg-blue-600 text-white rounded-[2rem] font-black text-xl hover:bg-blue-700 shadow-2xl shadow-blue-600/30 flex items-center justify-center gap-4 transition-all active:scale-95 disabled:opacity-50"
-            >
-              {isSolving ? <Loader2 className="w-7 h-7 animate-spin" /> : <Zap className="w-7 h-7 fill-white" />}
-              {isSolving ? solveStep : t('hwSolve')}
-            </button>
           </div>
         </div>
 
-        {/* Right: Results */}
-        <div className="lg:col-span-7">
-          {isSolving && (
-             <div className="h-full flex flex-col items-center justify-center space-y-8 animate-pulse">
-                <div className="w-32 h-32 bg-blue-100 dark:bg-slate-800 rounded-full flex items-center justify-center">
-                  <Brain className="w-16 h-16 text-blue-600 animate-bounce" />
+        {/* Main Input Area */}
+        <div className="lg:col-span-8 space-y-8">
+          <div className="bg-white dark:bg-slate-900 p-6 md:p-8 rounded-[2.5rem] border border-slate-200 dark:border-slate-800 shadow-xl relative overflow-hidden">
+            <div className="relative z-10 space-y-6">
+              <div className="space-y-3">
+                <label className="text-sm font-black uppercase tracking-widest text-slate-400 px-1">{t('enterQuestion')}</label>
+                <div className="relative group">
+                  <HelpCircle className={`absolute top-6 w-6 h-6 text-slate-400 transition-colors group-focus-within:text-blue-500 ${isRTL ? 'left-6' : 'right-6'}`} />
+                  <textarea
+                    value={question}
+                    onChange={(e) => setQuestion(e.target.value)}
+                    placeholder={t('enterQuestion')}
+                    className={`w-full py-6 bg-slate-50 dark:bg-slate-800/50 border-2 border-transparent focus:border-blue-600/20 rounded-[2rem] outline-none text-slate-900 dark:text-white font-bold text-lg shadow-inner transition-all min-h-[160px] resize-none ${isRTL ? 'pl-6 pr-6' : 'pl-6 pr-16'}`}
+                  />
                 </div>
-                <p className="text-xl font-black text-slate-400 tracking-tighter uppercase">{solveStep}</p>
-             </div>
-          )}
+              </div>
 
-          {!isSolving && !solution && (
-            <div className="h-full flex flex-col items-center justify-center text-center space-y-6 opacity-30 grayscale">
-              <Search className="w-24 h-24 text-slate-300" />
-              <p className="text-lg font-bold text-slate-400 max-w-xs">{t('hwPlaceholder')}</p>
+              {image && (
+                <div className="flex items-center gap-4 p-4 bg-blue-50 dark:bg-blue-900/20 rounded-2xl border border-blue-100 dark:border-blue-800">
+                  <div className="w-12 h-12 rounded-xl bg-blue-200 dark:bg-blue-800 overflow-hidden flex-shrink-0">
+                    <img src={`data:${image.mimeType};base64,${image.data}`} className="w-full h-full object-cover" />
+                  </div>
+                  <div className="flex-grow">
+                    <p className="text-sm font-black text-blue-700 dark:text-blue-300">{t('imageAttached')}</p>
+                    <button onClick={() => setImage(null)} className="text-xs text-red-500 font-bold hover:underline">Remove</button>
+                  </div>
+                  <CheckCircle2 className="w-6 h-6 text-blue-500" />
+                </div>
+              )}
+
+              <div className="flex gap-4 pt-2">
+                <input type="file" ref={fileInputRef} onChange={handleImageUpload} accept="image/*" className="hidden" />
+                <button 
+                  onClick={() => fileInputRef.current?.click()}
+                  className="px-6 py-4 rounded-2xl border-2 border-slate-200 dark:border-slate-700 text-slate-500 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors"
+                  title={t('uploadImage')}
+                >
+                  <ImageIcon className="w-6 h-6" />
+                </button>
+                <button
+                  onClick={handleSolve}
+                  disabled={isSolving || (!question.trim() && !image)}
+                  className="flex-grow bg-blue-600 hover:bg-blue-700 text-white rounded-2xl font-black text-lg shadow-xl shadow-blue-600/30 flex items-center justify-center gap-3 transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {isSolving ? <Loader2 className="w-6 h-6 animate-spin" /> : <Brain className="w-6 h-6" />}
+                  {isSolving ? t('solving') : t('solveButton')}
+                </button>
+              </div>
             </div>
-          )}
+          </div>
 
+          {/* Solution Area */}
           {solution && (
-            <div className="space-y-8 animate-in fade-in slide-in-from-right-12 duration-700 pb-20">
-              <div className="bg-white dark:bg-slate-900 rounded-[2.5rem] p-8 border-l-8 border-l-blue-600 border border-slate-200 dark:border-slate-800 shadow-xl">
-                <div className="flex items-center gap-3 mb-4">
-                  <Sparkles className="text-blue-600 w-6 h-6" />
-                  <span className="text-xs font-black uppercase tracking-widest text-blue-600">The Eyad Approach</span>
-                </div>
-                <p className="text-xl font-black text-slate-900 dark:text-white leading-tight mb-4">{solution.summary}</p>
-                <div className="flex gap-2">
-                   <button 
-                    onClick={() => handleSolve("Explain it in a much simpler way, use very basic words")}
-                    className="px-4 py-2 bg-slate-100 dark:bg-slate-800 rounded-xl text-xs font-bold text-slate-600 dark:text-slate-400 flex items-center gap-2 hover:bg-blue-600 hover:text-white transition-all"
-                   >
-                     <Repeat className="w-3.5 h-3.5" /> {t('explainSimpler')}
-                   </button>
-                </div>
-              </div>
-
-              <div className="space-y-4">
-                <h3 className="text-xs font-black uppercase tracking-[0.2em] text-slate-400 px-4 flex items-center gap-2">
-                  <Zap className="w-4 h-4 text-amber-500 fill-amber-500" /> {t('stepByStep')}
-                </h3>
-                {solution.steps.map((step, idx) => (
-                  <div key={idx} className="bg-white dark:bg-slate-900 p-6 rounded-3xl border border-slate-100 dark:border-slate-800 flex gap-6 group hover:border-blue-300 dark:hover:border-blue-900/50 transition-colors shadow-sm">
-                    <div className="w-12 h-12 bg-slate-50 dark:bg-slate-800 rounded-2xl flex-shrink-0 flex items-center justify-center font-black text-blue-600 text-xl group-hover:bg-blue-600 group-hover:text-white transition-all">
-                      {idx + 1}
-                    </div>
-                    <p className="text-slate-700 dark:text-slate-300 font-medium leading-relaxed self-center">
-                      {step}
-                    </p>
+            <div className="animate-in fade-in slide-in-from-bottom-8 space-y-6">
+              
+              {/* Summary Card */}
+              <div className="bg-gradient-to-br from-blue-600 to-indigo-700 rounded-[2.5rem] p-8 md:p-10 text-white shadow-2xl relative overflow-hidden">
+                <div className="relative z-10 space-y-4">
+                  <div className="flex items-center gap-3 opacity-80">
+                    <CheckCircle2 className="w-6 h-6" />
+                    <span className="text-xs font-black uppercase tracking-widest">{t('solutionTitle')}</span>
                   </div>
-                ))}
+                  <h2 className="text-2xl md:text-3xl font-black leading-tight">{solution.summary}</h2>
+                </div>
+                <div className="absolute top-0 right-0 w-64 h-64 bg-white/10 rounded-full blur-3xl -mr-20 -mt-20"></div>
               </div>
 
+              {/* Steps & Logic Grid */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div className="bg-emerald-50 dark:bg-emerald-900/10 p-8 rounded-[2rem] border border-emerald-100 dark:border-emerald-900/30">
-                  <div className="flex items-center gap-3 mb-4 text-emerald-600 dark:text-emerald-400">
-                    <GraduationCap className="w-6 h-6" />
-                    <span className="font-black uppercase tracking-widest text-xs">{t('theorySection')}</span>
-                  </div>
-                  <p className="text-emerald-800 dark:text-emerald-200 font-bold leading-relaxed">{solution.theory}</p>
+                
+                {/* Steps */}
+                <div className="md:col-span-2 bg-white dark:bg-slate-900 rounded-[2.5rem] p-8 border border-slate-200 dark:border-slate-800 shadow-lg">
+                   <h3 className="flex items-center gap-2 text-slate-400 font-black uppercase tracking-widest text-xs mb-6">
+                     <Repeat className="w-4 h-4" /> {t('stepsTitle')}
+                   </h3>
+                   <div className="space-y-6">
+                     {solution.steps.map((step, idx) => (
+                       <div key={idx} className="flex gap-4">
+                         <div className="flex-shrink-0 w-8 h-8 rounded-full bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 flex items-center justify-center font-black text-sm border border-blue-200 dark:border-blue-800">
+                           {idx + 1}
+                         </div>
+                         <p className="pt-1 text-slate-700 dark:text-slate-300 font-medium text-lg leading-relaxed">
+                           {step}
+                         </p>
+                       </div>
+                     ))}
+                   </div>
                 </div>
 
-                <div className="bg-amber-50 dark:bg-amber-900/10 p-8 rounded-[2rem] border border-amber-100 dark:border-amber-900/30">
-                  <div className="flex items-center gap-3 mb-4 text-amber-600 dark:text-amber-400">
-                    <Lightbulb className="w-6 h-6" />
-                    <span className="font-black uppercase tracking-widest text-xs">{t('proTip')}</span>
-                  </div>
-                  <p className="text-amber-800 dark:text-emerald-200 font-bold leading-relaxed italic">"{solution.tip}"</p>
+                {/* Theory */}
+                <div className="bg-indigo-50 dark:bg-indigo-900/10 rounded-[2.5rem] p-8 border border-indigo-100 dark:border-indigo-900/30">
+                  <h3 className="flex items-center gap-2 text-indigo-400 font-black uppercase tracking-widest text-xs mb-4">
+                    <BookOpen className="w-4 h-4" /> {t('theoryTitle')}
+                  </h3>
+                  <p className="text-indigo-900 dark:text-indigo-200 font-medium leading-relaxed">
+                    {solution.theory}
+                  </p>
                 </div>
+
+                {/* Tip */}
+                <div className="bg-emerald-50 dark:bg-emerald-900/10 rounded-[2.5rem] p-8 border border-emerald-100 dark:border-emerald-900/30">
+                  <h3 className="flex items-center gap-2 text-emerald-500 font-black uppercase tracking-widest text-xs mb-4">
+                    <Lightbulb className="w-4 h-4" /> {t('tipTitle')}
+                  </h3>
+                  <p className="text-emerald-900 dark:text-emerald-200 font-medium leading-relaxed italic">
+                    "{solution.tip}"
+                  </p>
+                </div>
+
               </div>
             </div>
           )}
