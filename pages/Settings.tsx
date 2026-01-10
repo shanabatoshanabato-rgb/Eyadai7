@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
-import { Settings as SettingsIcon, Sun, Moon, Volume2, Globe, Save, Check, ShieldCheck, ShieldAlert, Activity } from 'lucide-react';
+import { Settings as SettingsIcon, Sun, Moon, Volume2, Globe, Save, Check, ShieldCheck, ShieldAlert, Activity, Smartphone, BatteryMedium } from 'lucide-react';
 import { Language, Theme } from '../types';
 import { VOICES, DEFAULT_SETTINGS } from '../constants';
 import { useTranslation } from '../translations';
@@ -15,6 +15,9 @@ export const Settings: React.FC = () => {
   );
   const [voice, setVoice] = useState(
     localStorage.getItem('eyad-ai-voice') || DEFAULT_SETTINGS.voiceName
+  );
+  const [keepScreenOn, setKeepScreenOn] = useState(
+    localStorage.getItem('eyad-ai-screen-lock') === 'true'
   );
   const [saved, setSaved] = useState(false);
   const [diagnostic, setDiagnostic] = useState<{ status: 'idle' | 'checking' | 'ok' | 'fail', message: string }>({ status: 'idle', message: '' });
@@ -54,6 +57,7 @@ export const Settings: React.FC = () => {
     localStorage.setItem('eyad-ai-theme', theme);
     localStorage.setItem('eyad-ai-lang', language);
     localStorage.setItem('eyad-ai-voice', voice);
+    localStorage.setItem('eyad-ai-screen-lock', String(keepScreenOn));
     setSaved(true);
     setTimeout(() => {
       setSaved(false);
@@ -109,6 +113,7 @@ export const Settings: React.FC = () => {
         </div>
 
         <div className="space-y-10">
+          {/* Theme Section */}
           <section className="space-y-4">
             <h3 className="text-xs font-black uppercase tracking-[0.2em] text-slate-400 flex items-center gap-2">
               <Sun className="w-4 h-4" /> {t('appearance')}
@@ -130,6 +135,29 @@ export const Settings: React.FC = () => {
             </div>
           </section>
 
+          {/* Screen Wake Lock Section */}
+          <section className="space-y-4">
+            <h3 className="text-xs font-black uppercase tracking-[0.2em] text-slate-400 flex items-center gap-2">
+              <Smartphone className="w-4 h-4" /> Screen & Battery
+            </h3>
+            <div className="flex items-center justify-between p-6 bg-slate-50 dark:bg-slate-800/50 rounded-3xl border border-slate-100 dark:border-slate-800">
+              <div className="flex items-center gap-3">
+                {keepScreenOn ? <Sun className="text-yellow-500" /> : <BatteryMedium className="text-slate-400" />}
+                <div>
+                  <p className="font-black dark:text-white">{t('screenLock')}</p>
+                  <p className="text-sm text-slate-500 font-medium">{t('screenLockDesc')}</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setKeepScreenOn(!keepScreenOn)}
+                className={`w-16 h-9 flex items-center rounded-full p-1 transition-colors ${keepScreenOn ? 'bg-green-500' : 'bg-slate-300'}`}
+              >
+                <div className={`bg-white w-7 h-7 rounded-full shadow-lg transform transition-transform ${keepScreenOn ? 'translate-x-7' : 'translate-x-0'}`} />
+              </button>
+            </div>
+          </section>
+
+          {/* Language Section */}
           <section className="space-y-4">
             <h3 className="text-xs font-black uppercase tracking-[0.2em] text-slate-400 flex items-center gap-2">
               <Globe className="w-4 h-4" /> {t('systemLang')}
@@ -157,6 +185,7 @@ export const Settings: React.FC = () => {
             </div>
           </section>
 
+          {/* Voice Section */}
           <section className="space-y-4">
             <h3 className="text-xs font-black uppercase tracking-[0.2em] text-slate-400 flex items-center gap-2">
               <Volume2 className="w-4 h-4" /> {t('voiceProfile')}

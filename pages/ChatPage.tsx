@@ -94,7 +94,6 @@ export const ChatPage: React.FC = () => {
       const modelMsg: Message = {
         id: (Date.now() + 1).toString(),
         role: 'model',
-        // FIX: Access .text from aiResponse instead of assigning the whole object
         text: aiResponse.text,
         timestamp: Date.now()
       };
@@ -171,7 +170,10 @@ export const ChatPage: React.FC = () => {
       <div className="p-4 bg-white dark:bg-slate-950 border-t border-slate-200 dark:border-slate-800">
         <div className="max-w-4xl mx-auto flex gap-3">
           <input type="file" ref={fileInputRef} onChange={handleImageUpload} accept="image/*" className="hidden" />
-          <button onClick={() => fileInputRef.current?.click()} className="p-4 bg-slate-100 dark:bg-slate-900 text-slate-500 rounded-2xl hover:bg-slate-200 transition-colors">
+          <button 
+            onClick={() => fileInputRef.current?.click()} 
+            className="p-4 bg-slate-200 dark:bg-slate-800 text-slate-600 dark:text-slate-400 rounded-2xl hover:bg-slate-300 dark:hover:bg-slate-700 transition-all border border-slate-300 dark:border-slate-700 shadow-sm"
+          >
             <Paperclip className="w-6 h-6" />
           </button>
           <textarea
@@ -182,7 +184,7 @@ export const ChatPage: React.FC = () => {
             className="flex-grow bg-slate-100 dark:bg-slate-900 border-none rounded-2xl px-5 py-4 focus:ring-2 focus:ring-blue-500 outline-none resize-none min-h-[56px] text-slate-900 dark:text-white font-medium"
             rows={1}
           />
-          <button onClick={handleSend} disabled={(!input.trim() && !attachedImage) || isTyping} className="p-4 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white rounded-2xl shadow-lg flex items-center justify-center">
+          <button onClick={handleSend} disabled={(!input.trim() && !attachedImage) || isTyping} className="p-4 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white rounded-2xl shadow-lg flex items-center justify-center transition-all active:scale-90">
             {isTyping ? <Loader2 className="w-6 h-6 animate-spin" /> : <Send className="w-6 h-6" />}
           </button>
         </div>
