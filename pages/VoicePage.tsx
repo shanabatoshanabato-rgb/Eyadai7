@@ -4,7 +4,6 @@ import {
   PhoneCall, 
   StopCircle, 
   Mic, 
-  AlertCircle,
   Zap
 } from 'lucide-react';
 import { getAI, decode, decodeAudioData, encode } from '../services/geminiService';
@@ -23,50 +22,33 @@ export const VoicePage: React.FC = () => {
   const streamRef = useRef<MediaStream | null>(null);
   const nextStartTimeRef = useRef<number>(0);
   const sourcesRef = useRef<Set<AudioBufferSourceNode>>(new Set());
-  // مرجع للتحكم في قفل الشاشة
-  const wakeLockRef = useRef<any>(null);
   
   const t = useTranslation();
 
   const stopEverything = async () => {
     setIsCalling(false);
 
-    // 1. Release Screen Wake Lock safely
-    if (wakeLockRef.current) {
-      try {
-        await wakeLockRef.current.release();
-        wakeLockRef.current = null;
-      } catch (err) {
-        console.warn('Wake Lock release warning:', err);
-      }
-    }
-
-    // 2. Kill Gemini Session
     if (sessionRef.current) {
       try { sessionRef.current.close(); } catch(e) {}
       sessionRef.current = null;
     }
 
-    // 3. Stop Microphone Hard
     if (streamRef.current) {
       streamRef.current.getTracks().forEach(track => track.stop());
       streamRef.current = null;
     }
 
-    // 4. Disconnect processor
     if (processorRef.current) {
       processorRef.current.disconnect();
       processorRef.current.onaudioprocess = null;
       processorRef.current = null;
     }
 
-    // 5. Silence all playing sources
     sourcesRef.current.forEach(source => {
       try { source.stop(); source.disconnect(); } catch(e) {}
     });
     sourcesRef.current.clear();
 
-    // 6. Close Contexts
     if (audioContextRef.current) {
       try { audioContextRef.current.close(); } catch(e) {}
       audioContextRef.current = null;
@@ -80,16 +62,13 @@ export const VoicePage: React.FC = () => {
   };
 
   useEffect(() => {
-    // مراقبة رؤية الصفحة - إذا خرج اليوزر من التبويب، اغلق المكالمة فوراً
     const handleVisibilityChange = () => {
       if (document.visibilityState === 'hidden') {
         stopEverything();
       }
     };
-
     document.addEventListener('visibilitychange', handleVisibilityChange);
     window.addEventListener('blur', handleVisibilityChange);
-
     return () => {
       document.removeEventListener('visibilitychange', handleVisibilityChange);
       window.removeEventListener('blur', handleVisibilityChange);
@@ -100,18 +79,6 @@ export const VoicePage: React.FC = () => {
   const startCall = async () => {
     try {
       setError(null);
-      
-      // 1. Check Settings for Wake Lock
-      const shouldLock = localStorage.getItem('eyad-ai-screen-lock') === 'true';
-      if (shouldLock && 'wakeLock' in navigator) {
-        try {
-          wakeLockRef.current = await (navigator as any).wakeLock.request('screen');
-        } catch (err) {
-          // If locking fails (battery saver, permission, etc), just log it but continue the call.
-          console.warn('Screen Wake Lock failed to activate:', err);
-        }
-      }
-
       const ai = getAI();
       
       const inputCtx = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 16000 });
@@ -132,7 +99,8 @@ export const VoicePage: React.FC = () => {
           onopen: () => {
             if (!inputContextRef.current || !streamRef.current) return;
             const source = inputContextRef.current.createMediaStreamSource(streamRef.current);
-            const processor = inputContextRef.current.createScriptProcessor(4096, 1, 1);
+            // استخدم حجم بافر أصغر (2048 بدلاً من 4096) لتقليل التأخير
+            const processor = inputContextRef.current.createScriptProcessor(2048, 1, 1);
             processorRef.current = processor;
             
             processor.onaudioprocess = (e) => {
@@ -168,7 +136,11 @@ export const VoicePage: React.FC = () => {
         config: {
           responseModalities: [Modality.AUDIO],
           speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: apiVoiceName } } },
-          systemInstruction: "You are Eyad AI. Be friendly, keep answers short. Match user language."
+          systemInstruction: `You are Eyad AI, a ultra-high-performance voice assistant. 
+          1. SPEED: Respond instantly. Keep answers under 15 words whenever possible.
+          2. LANGUAGE: Detect user language in the first few milliseconds. ALWAYS respond in the EXACT same language as the user.
+          3. ACCURACY: Provide 100% accurate, factual information. If unsure, say you don't know concisely.
+          4. STYLE: No fillers (um, ah). No repetitive sentences. Friendly but professional.`
         }
       });
 
@@ -185,7 +157,7 @@ export const VoicePage: React.FC = () => {
       <div className="max-w-md w-full text-center relative z-10 space-y-12">
         <div className="space-y-4">
           <div className="inline-flex items-center gap-2 px-4 py-2 bg-blue-500/10 rounded-full text-blue-400 text-xs font-black uppercase tracking-widest border border-blue-500/20">
-            <Zap className="w-3.5 h-3.5 fill-blue-400" /> Ultra-Low Latency
+            <Zap className="w-3.5 h-3.5 fill-blue-400" /> Ultra-Fast Engine
           </div>
           <h1 className="text-4xl font-black text-white">{t('voice')}</h1>
           {error && <p className="text-red-400 font-bold">{error}</p>}
