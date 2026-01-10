@@ -28,24 +28,33 @@ export interface AIResponse {
   sources: { title: string; uri: string }[];
 }
 
-// Helper to extract JSON from text that might contain markdown or extra words
+/**
+ * Robust JSON extraction utility.
+ * Handles markdown blocks, extra text, and malformed prefixes.
+ */
 export const extractJson = (text: string) => {
   try {
-    // 1. Remove markdown code blocks (```json ... ```)
-    let cleanText = text.replace(/```json/g, '').replace(/```/g, '').trim();
+    // 1. Clean markdown formatting
+    let cleanText = text.replace(/```json/gi, '').replace(/```/g, '').trim();
     
-    // 2. Try to find the first valid JSON object OR Array
-    // This regex looks for anything starting with { and ending with } OR starting with [ and ending with ]
-    const jsonMatch = cleanText.match(/(\{[\s\S]*\}|\[[\s\S]*\])/);
+    // 2. Find the bounds of the JSON object
+    const start = cleanText.indexOf('{');
+    const end = cleanText.lastIndexOf('}');
     
-    if (jsonMatch) {
-      return JSON.parse(jsonMatch[0]);
+    if (start === -1 || end === -1) {
+      // Try array format if object fails
+      const arrStart = cleanText.indexOf('[');
+      const arrEnd = cleanText.lastIndexOf(']');
+      if (arrStart !== -1 && arrEnd !== -1) {
+        return JSON.parse(cleanText.substring(arrStart, arrEnd + 1));
+      }
+      throw new Error("NO_JSON_FOUND");
     }
     
-    // 3. Fallback: try parsing the whole text
-    return JSON.parse(cleanText);
+    const jsonStr = cleanText.substring(start, end + 1);
+    return JSON.parse(jsonStr);
   } catch (e) {
-    console.error("JSON Parse Error:", e, "Original Text:", text);
+    console.error("Critical Parse Error:", e, "Input:", text);
     throw new Error("FAILED_TO_PARSE_JSON");
   }
 };
@@ -53,19 +62,16 @@ export const extractJson = (text: string) => {
 const TEXT_MODELS_FALLBACK = [
   'gemini-3-flash-preview',
   'gemini-2.5-flash-latest',
-  'gemini-2.0-flash-exp',
   'gemini-flash-lite-latest'
 ];
 
 export const generateText = async (prompt: string, options?: GenerateOptions): Promise<AIResponse> => {
   let lastError: any = null;
   
-  // Priority: 
-  // 1. gemini-3-flash-preview (Smartest fast model)
-  // 2. gemini-2.5-flash-latest (Reliable fallback)
+  // Use 2.5 flash specifically for images as it's currently more stable for multimodal Vercel payloads
   const modelsToTry = options?.image 
-    ? ['gemini-2.5-flash-latest', 'gemini-3-flash-preview'] // 2.5 is often better/faster for single images currently
-    : (options?.useSearch ? ['gemini-2.5-flash-latest', 'gemini-3-flash-preview'] : TEXT_MODELS_FALLBACK);
+    ? ['gemini-2.5-flash-latest', 'gemini-3-flash-preview'] 
+    : (options?.useSearch ? ['gemini-3-flash-preview', 'gemini-2.5-flash-latest'] : TEXT_MODELS_FALLBACK);
 
   for (const modelName of modelsToTry) {
     try {
@@ -82,7 +88,7 @@ export const generateText = async (prompt: string, options?: GenerateOptions): P
       }
 
       const config: any = {
-        systemInstruction: options?.systemInstruction || "You are Eyad AI, a helpful assistant.",
+        systemInstruction: options?.systemInstruction || "You are Eyad AI, a professional engineer and tutor.",
         thinkingConfig: { thinkingBudget: 0 }
       };
 
@@ -117,37 +123,13 @@ export const generateText = async (prompt: string, options?: GenerateOptions): P
 
       return { text, sources };
     } catch (error: any) {
-      console.warn(`Model ${modelName} failed:`, error.message);
+      console.error(`Model ${modelName} encountered an error:`, error.message);
       lastError = error;
-      // If error is related to API Key, stop retrying immediately
-      if (error.message?.includes("API_KEY") || error.message?.includes("403")) {
-        throw error;
-      }
-      // Continue to next model on other errors
-      continue; 
+      if (error.message?.includes('429') || error.status === 429) continue; 
+      throw error;
     }
   }
   throw lastError;
-};
-
-export const generateImage = async (prompt: string): Promise<string | null> => {
-  try {
-    const ai = getAI();
-    const response = await ai.models.generateContent({
-      model: 'gemini-2.5-flash-image',
-      contents: { parts: [{ text: prompt }] },
-      config: { imageConfig: { aspectRatio: "16:9" } }
-    });
-    const parts = response.candidates?.[0]?.content?.parts;
-    if (parts) {
-      for (const part of parts) {
-        if (part.inlineData) return `data:image/png;base64,${part.inlineData.data}`;
-      }
-    }
-    return null;
-  } catch (err) {
-    return null;
-  }
 };
 
 export const generateSpeech = async (text: string, voiceName: string = 'Kore'): Promise<string | null> => {
