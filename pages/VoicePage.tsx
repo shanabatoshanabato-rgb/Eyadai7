@@ -100,24 +100,26 @@ export const VoicePage: React.FC = () => {
           onopen: () => {
             if (!inputContextRef.current || !streamRef.current) return;
             const source = inputContextRef.current.createMediaStreamSource(streamRef.current);
-            // استخدم حجم بافر أصغر لتقليل التأخير
             const processor = inputContextRef.current.createScriptProcessor(2048, 1, 1);
             processorRef.current = processor;
             
+            // Following guideline: Use sessionPromise.then to send data to avoid stale closures
             processor.onaudioprocess = (e) => {
-              if (!sessionRef.current) return;
               const inputData = e.inputBuffer.getChannelData(0);
               const int16 = new Int16Array(inputData.length);
               for (let i = 0; i < inputData.length; i++) int16[i] = inputData[i] * 32768;
-              sessionRef.current.sendRealtimeInput({ 
-                media: { data: encode(new Uint8Array(int16.buffer)), mimeType: 'audio/pcm;rate=16000' } 
+              
+              sessionPromise.then((session) => {
+                session.sendRealtimeInput({ 
+                  media: { data: encode(new Uint8Array(int16.buffer)), mimeType: 'audio/pcm;rate=16000' } 
+                });
               });
             };
             source.connect(processor);
             processor.connect(inputContextRef.current.destination);
           },
           onmessage: async (message: any) => {
-            if (!audioContextRef.current || !sessionRef.current) return;
+            if (!audioContextRef.current) return;
             const audioData = message.serverContent?.modelTurn?.parts?.[0]?.inlineData?.data;
             if (audioData) {
               const buffer = await decodeAudioData(decode(audioData), audioContextRef.current, 24000, 1);
@@ -135,7 +137,6 @@ export const VoicePage: React.FC = () => {
           onerror: () => stopEverything(),
         },
         config: {
-          // إضافة Google Search كأداة
           tools: [{ googleSearch: {} }],
           responseModalities: [Modality.AUDIO],
           speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: apiVoiceName } } },

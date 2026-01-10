@@ -28,20 +28,33 @@ export interface AIResponse {
   sources: { title: string; uri: string }[];
 }
 
-// قائمة النماذج البديلة للتبديل بينها في حال فشل أحدهما بسبب الحصة (Quota)
+// Helper to extract JSON from text that might contain markdown or extra words
+export const extractJson = (text: string) => {
+  try {
+    const jsonMatch = text.match(/\{[\s\S]*\}/);
+    if (jsonMatch) {
+      return JSON.parse(jsonMatch[0]);
+    }
+    return JSON.parse(text);
+  } catch (e) {
+    console.error("JSON Parse Error:", e, "Original Text:", text);
+    throw new Error("FAILED_TO_PARSE_JSON");
+  }
+};
+
 const TEXT_MODELS_FALLBACK = [
   'gemini-3-flash-preview',
-  'gemini-flash-lite-latest',
-  'gemini-3-pro-preview'
+  'gemini-2.5-flash-latest',
+  'gemini-flash-lite-latest'
 ];
 
 export const generateText = async (prompt: string, options?: GenerateOptions): Promise<AIResponse> => {
   let lastError: any = null;
-
-  // تغيير جوهري: نستخدم Gemini 3 Flash للبحث أيضاً لأنه أسرع بكثير من Pro
-  const searchModels = ['gemini-3-flash-preview', 'gemini-2.5-flash-latest'];
   
-  const modelsToTry = options?.useSearch ? searchModels : TEXT_MODELS_FALLBACK;
+  // For images, gemini-3-flash-preview is best, fallback to 2.5 flash
+  const modelsToTry = options?.image 
+    ? ['gemini-3-flash-preview', 'gemini-2.5-flash-latest'] 
+    : (options?.useSearch ? ['gemini-3-flash-preview', 'gemini-2.5-flash-latest'] : TEXT_MODELS_FALLBACK);
 
   for (const modelName of modelsToTry) {
     try {
@@ -59,7 +72,6 @@ export const generateText = async (prompt: string, options?: GenerateOptions): P
 
       const config: any = {
         systemInstruction: options?.systemInstruction || "You are Eyad AI, a helpful assistant.",
-        // إضافة إعدادات التفكير بصفر لضمان سرعة الاستجابة القصوى
         thinkingConfig: { thinkingBudget: 0 }
       };
 
@@ -96,13 +108,11 @@ export const generateText = async (prompt: string, options?: GenerateOptions): P
     } catch (error: any) {
       lastError = error;
       if (error.message?.includes('429') || error.status === 429) {
-        console.warn(`Model ${modelName} reached quota. Trying next fallback...`);
         continue; 
       }
       throw error;
     }
   }
-
   throw lastError;
 };
 
@@ -122,7 +132,6 @@ export const generateImage = async (prompt: string): Promise<string | null> => {
     }
     return null;
   } catch (err) {
-    console.error("Image gen error:", err);
     return null;
   }
 };
