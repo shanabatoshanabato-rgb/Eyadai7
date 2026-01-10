@@ -66,7 +66,10 @@ export const VoicePage: React.FC = () => {
   };
 
   useEffect(() => {
-    return () => stopEverything();
+    // FIX: Do not return the async call directly to avoid the Promise return type error
+    return () => {
+      stopEverything();
+    };
   }, []);
 
   const startCall = async () => {
@@ -134,8 +137,8 @@ export const VoicePage: React.FC = () => {
               nextStartTimeRef.current = 0;
             }
           },
-          onclose: () => stopEverything(),
-          onerror: () => stopEverything(),
+          onclose: () => { stopEverything(); },
+          onerror: () => { stopEverything(); },
         },
         config: {
           tools: [{ googleSearch: {} }],
