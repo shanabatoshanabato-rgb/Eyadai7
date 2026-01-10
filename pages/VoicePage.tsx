@@ -4,7 +4,8 @@ import {
   PhoneCall, 
   StopCircle, 
   Mic, 
-  Zap
+  Zap,
+  Globe
 } from 'lucide-react';
 import { getAI, decode, decodeAudioData, encode } from '../services/geminiService';
 import { MODELS, VOICE_MAP, DEFAULT_SETTINGS } from '../constants';
@@ -99,7 +100,7 @@ export const VoicePage: React.FC = () => {
           onopen: () => {
             if (!inputContextRef.current || !streamRef.current) return;
             const source = inputContextRef.current.createMediaStreamSource(streamRef.current);
-            // استخدم حجم بافر أصغر (2048 بدلاً من 4096) لتقليل التأخير
+            // استخدم حجم بافر أصغر لتقليل التأخير
             const processor = inputContextRef.current.createScriptProcessor(2048, 1, 1);
             processorRef.current = processor;
             
@@ -134,13 +135,15 @@ export const VoicePage: React.FC = () => {
           onerror: () => stopEverything(),
         },
         config: {
+          // إضافة Google Search كأداة
+          tools: [{ googleSearch: {} }],
           responseModalities: [Modality.AUDIO],
           speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: apiVoiceName } } },
           systemInstruction: `You are Eyad AI, a ultra-high-performance voice assistant. 
           1. SPEED: Respond instantly. Keep answers under 15 words whenever possible.
-          2. LANGUAGE: Detect user language in the first few milliseconds. ALWAYS respond in the EXACT same language as the user.
-          3. ACCURACY: Provide 100% accurate, factual information. If unsure, say you don't know concisely.
-          4. STYLE: No fillers (um, ah). No repetitive sentences. Friendly but professional.`
+          2. LANGUAGE: Detect user language immediately. ALWAYS respond in the EXACT same language as the user.
+          3. ACCURACY: You have access to Google Search. Use it to provide factual, real-time answers when needed.
+          4. STYLE: No fillers. Friendly but professional.`
         }
       });
 
@@ -157,7 +160,7 @@ export const VoicePage: React.FC = () => {
       <div className="max-w-md w-full text-center relative z-10 space-y-12">
         <div className="space-y-4">
           <div className="inline-flex items-center gap-2 px-4 py-2 bg-blue-500/10 rounded-full text-blue-400 text-xs font-black uppercase tracking-widest border border-blue-500/20">
-            <Zap className="w-3.5 h-3.5 fill-blue-400" /> Ultra-Fast Engine
+            <Zap className="w-3.5 h-3.5 fill-blue-400" /> Ultra-Fast + <Globe className="w-3.5 h-3.5 ml-1" /> Web
           </div>
           <h1 className="text-4xl font-black text-white">{t('voice')}</h1>
           {error && <p className="text-red-400 font-bold">{error}</p>}

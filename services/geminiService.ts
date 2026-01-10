@@ -38,8 +38,12 @@ const TEXT_MODELS_FALLBACK = [
 export const generateText = async (prompt: string, options?: GenerateOptions): Promise<AIResponse> => {
   let lastError: any = null;
 
-  // محاولة استخدام النماذج المتاحة بالتتابع في حال حدوث خطأ 429
-  for (const modelName of (options?.useSearch ? ['gemini-3-pro-preview'] : TEXT_MODELS_FALLBACK)) {
+  // تغيير جوهري: نستخدم Gemini 3 Flash للبحث أيضاً لأنه أسرع بكثير من Pro
+  const searchModels = ['gemini-3-flash-preview', 'gemini-2.5-flash-latest'];
+  
+  const modelsToTry = options?.useSearch ? searchModels : TEXT_MODELS_FALLBACK;
+
+  for (const modelName of modelsToTry) {
     try {
       const ai = getAI();
       const parts: any[] = [{ text: prompt }];
@@ -54,7 +58,9 @@ export const generateText = async (prompt: string, options?: GenerateOptions): P
       }
 
       const config: any = {
-        systemInstruction: options?.systemInstruction || "You are Eyad AI, a helpful assistant."
+        systemInstruction: options?.systemInstruction || "You are Eyad AI, a helpful assistant.",
+        // إضافة إعدادات التفكير بصفر لضمان سرعة الاستجابة القصوى
+        thinkingConfig: { thinkingBudget: 0 }
       };
 
       if (options?.responseMimeType && !options?.useSearch) {
@@ -89,17 +95,14 @@ export const generateText = async (prompt: string, options?: GenerateOptions): P
       return { text, sources };
     } catch (error: any) {
       lastError = error;
-      // إذا كان الخطأ هو Quota Exceeded (429)، نجرب النموذج التالي
       if (error.message?.includes('429') || error.status === 429) {
         console.warn(`Model ${modelName} reached quota. Trying next fallback...`);
         continue; 
       }
-      // إذا كان خطأ آخر، نتوقف ونرمي الخطأ
       throw error;
     }
   }
 
-  // إذا وصلنا هنا، يعني كل النماذج فشلت
   throw lastError;
 };
 

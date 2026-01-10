@@ -18,6 +18,7 @@ export interface Message {
   text: string;
   timestamp: number;
   audioUrl?: string;
+  sources?: { title: string; uri: string }[];
 }
 
 export interface AppSettings {

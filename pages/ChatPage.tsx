@@ -11,7 +11,9 @@ import {
   Volume2,
   VolumeX,
   Paperclip,
-  X
+  X,
+  Globe,
+  ExternalLink
 } from 'lucide-react';
 import { generateText, generateSpeech, decode, decodeAudioData } from '../services/geminiService';
 import { Message } from '../types';
@@ -85,17 +87,28 @@ export const ChatPage: React.FC = () => {
     setIsTyping(true);
 
     try {
-      const systemPrompt = `You are Eyad AI. If an image is provided, analyze it thoroughly. Always match user's language. Use formatting for clarity.`;
+      // Prompt optimized for SPEED and ACCURACY
+      const systemPrompt = `You are Eyad AI. 
+      GOAL: Respond immediately.
+      RULES:
+      1. Use Google Search to verify facts quickly.
+      2. Keep answers concise and direct unless asked for details.
+      3. Match user language exactly.
+      4. Format clearly (bold key points).
+      5. Do not waste tokens on introductions like "Here is the answer". Just answer.`;
+      
       const aiResponse = await generateText(currentInput || "Analyze this image", { 
         systemInstruction: systemPrompt,
-        image: currentImage || undefined 
+        image: currentImage || undefined,
+        useSearch: true
       });
       
       const modelMsg: Message = {
         id: (Date.now() + 1).toString(),
         role: 'model',
         text: aiResponse.text,
-        timestamp: Date.now()
+        timestamp: Date.now(),
+        sources: aiResponse.sources
       };
       setMessages(prev => [...prev, modelMsg]);
     } catch (err: any) {
@@ -114,7 +127,9 @@ export const ChatPage: React.FC = () => {
           </div>
           <div>
             <h2 className="font-black text-slate-900 dark:text-white tracking-tight">{t('chat')}</h2>
-            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Vision Mode Active</p>
+            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest flex items-center gap-1">
+              <Globe className="w-3 h-3 text-green-500" /> Online & Fast
+            </p>
           </div>
         </div>
         <button onClick={() => setMessages([])} className="p-2 text-slate-400 hover:text-red-500 transition-colors">
@@ -127,14 +142,38 @@ export const ChatPage: React.FC = () => {
           <div className="h-full flex flex-col items-center justify-center text-center max-w-sm mx-auto">
             <Sparkles className="w-12 h-12 text-blue-500 mb-4 animate-pulse" />
             <h1 className="text-2xl font-black mb-2 dark:text-white">أنا إياد، جاهز للمساعدة</h1>
-            <p className="text-slate-500 dark:text-slate-400 text-sm">تقدر تسألني أي حاجة أو ترفع صورة لمسألة ونحلها سوا.</p>
+            <p className="text-slate-500 dark:text-slate-400 text-sm">تقدر تسألني أي حاجة، وأنا هبحثلك عن المعلومة الصح وأجيبهالك بسرعة.</p>
           </div>
         )}
 
         {messages.map((m) => (
-          <div key={m.id} className={`flex ${m.role === 'user' ? 'justify-end' : 'justify-start'} animate-in fade-in slide-in-from-bottom-2`}>
+          <div key={m.id} className={`flex flex-col ${m.role === 'user' ? 'items-end' : 'items-start'} animate-in fade-in slide-in-from-bottom-2`}>
             <div className={`relative group max-w-[85%] p-4 rounded-2xl shadow-sm ${m.role === 'user' ? 'bg-blue-600 text-white' : 'bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-slate-100'}`}>
               <p className="whitespace-pre-wrap leading-relaxed text-sm md:text-base">{m.text}</p>
+              
+              {/* Display Sources if available */}
+              {m.sources && m.sources.length > 0 && (
+                <div className="mt-4 pt-3 border-t border-slate-100 dark:border-slate-800 space-y-2">
+                  <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 flex items-center gap-1">
+                    <Globe className="w-3 h-3" /> Sources
+                  </p>
+                  <div className="flex flex-wrap gap-2">
+                    {m.sources.map((src, idx) => (
+                      <a 
+                        key={idx}
+                        href={src.uri}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-50 dark:bg-slate-800 rounded-lg text-xs font-bold text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-colors"
+                      >
+                        <ExternalLink className="w-3 h-3" />
+                        <span className="truncate max-w-[150px]">{src.title}</span>
+                      </a>
+                    ))}
+                  </div>
+                </div>
+              )}
+
               {m.role === 'model' && (
                 <button onClick={() => speakMessage(m.text, m.id)} className={`mt-2 flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider ${isPlaying === m.id ? 'text-blue-500' : 'text-slate-400 hover:text-blue-500'}`}>
                   {isPlaying === m.id ? <VolumeX className="w-3.5 h-3.5 animate-pulse" /> : <Volume2 className="w-3.5 h-3.5" />}
