@@ -38,14 +38,20 @@ export const Settings: React.FC = () => {
     setDiagnostic({ status: 'checking', message: 'Testing connection to Google AI...' });
     try {
       const response = await generateText("Say only 'API is working' to test connection.");
-      if (response) {
+      if (response && response.text) {
         setDiagnostic({ status: 'ok', message: 'API is working perfectly! Eyad is ready.' });
       } else {
-        setDiagnostic({ status: 'fail', message: 'API returned empty response. Check key permissions.' });
+        setDiagnostic({ status: 'fail', message: 'API returned empty response.' });
       }
     } catch (e: any) {
       console.error(e);
-      setDiagnostic({ status: 'fail', message: `Error: ${e.message || 'Unknown error.'}` });
+      const isMissing = e.message?.includes("API_KEY_MISSING");
+      setDiagnostic({ 
+        status: 'fail', 
+        message: isMissing 
+          ? 'API Key is missing. If on Vercel, add API_KEY to Environment Variables and redeploy.' 
+          : `Connection Failed: ${e.message}` 
+      });
     }
   };
 
@@ -64,7 +70,7 @@ export const Settings: React.FC = () => {
 
   return (
     <div className="max-w-2xl mx-auto p-4 md:p-8 space-y-8">
-      <div className={`p-6 rounded-[2rem] border transition-all duration-500 flex items-center justify-between gap-4 ${
+      <div className={`p-6 rounded-[2rem] border transition-all duration-500 flex flex-col md:flex-row items-start md:items-center justify-between gap-4 ${
         diagnostic.status === 'ok' ? 'bg-green-500/10 border-green-500/20 text-green-600' :
         diagnostic.status === 'fail' ? 'bg-red-500/10 border-red-500/20 text-red-600' :
         'bg-blue-600/5 border-blue-600/10 text-blue-600'
@@ -75,13 +81,13 @@ export const Settings: React.FC = () => {
           </div>
           <div>
             <p className="font-black text-sm uppercase tracking-widest">System Health</p>
-            <p className="text-sm font-bold opacity-80">{diagnostic.message || 'Check connection status'}</p>
+            <p className="text-sm font-bold opacity-80 leading-tight">{diagnostic.message || 'Check connection status'}</p>
           </div>
         </div>
         <button 
           onClick={runDiagnostic}
           disabled={diagnostic.status === 'checking'}
-          className="px-4 py-2 bg-white dark:bg-slate-800 border border-current rounded-xl text-xs font-black uppercase hover:opacity-70 transition-opacity"
+          className="px-4 py-2 bg-white dark:bg-slate-800 border border-current rounded-xl text-xs font-black uppercase hover:opacity-70 transition-opacity whitespace-nowrap"
         >
           {diagnostic.status === 'checking' ? 'Testing...' : 'Test API'}
         </button>

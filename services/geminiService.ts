@@ -31,11 +31,19 @@ export interface AIResponse {
 // Helper to extract JSON from text that might contain markdown or extra words
 export const extractJson = (text: string) => {
   try {
-    const jsonMatch = text.match(/\{[\s\S]*\}/);
+    // 1. Remove markdown code blocks (```json ... ```)
+    let cleanText = text.replace(/```json/g, '').replace(/```/g, '').trim();
+    
+    // 2. Try to find the first valid JSON object OR Array
+    // This regex looks for anything starting with { and ending with } OR starting with [ and ending with ]
+    const jsonMatch = cleanText.match(/(\{[\s\S]*\}|\[[\s\S]*\])/);
+    
     if (jsonMatch) {
       return JSON.parse(jsonMatch[0]);
     }
-    return JSON.parse(text);
+    
+    // 3. Fallback: try parsing the whole text
+    return JSON.parse(cleanText);
   } catch (e) {
     console.error("JSON Parse Error:", e, "Original Text:", text);
     throw new Error("FAILED_TO_PARSE_JSON");
@@ -45,16 +53,19 @@ export const extractJson = (text: string) => {
 const TEXT_MODELS_FALLBACK = [
   'gemini-3-flash-preview',
   'gemini-2.5-flash-latest',
+  'gemini-2.0-flash-exp',
   'gemini-flash-lite-latest'
 ];
 
 export const generateText = async (prompt: string, options?: GenerateOptions): Promise<AIResponse> => {
   let lastError: any = null;
   
-  // For images, gemini-3-flash-preview is best, fallback to 2.5 flash
+  // Priority: 
+  // 1. gemini-3-flash-preview (Smartest fast model)
+  // 2. gemini-2.5-flash-latest (Reliable fallback)
   const modelsToTry = options?.image 
-    ? ['gemini-3-flash-preview', 'gemini-2.5-flash-latest'] 
-    : (options?.useSearch ? ['gemini-3-flash-preview', 'gemini-2.5-flash-latest'] : TEXT_MODELS_FALLBACK);
+    ? ['gemini-2.5-flash-latest', 'gemini-3-flash-preview'] // 2.5 is often better/faster for single images currently
+    : (options?.useSearch ? ['gemini-2.5-flash-latest', 'gemini-3-flash-preview'] : TEXT_MODELS_FALLBACK);
 
   for (const modelName of modelsToTry) {
     try {
@@ -106,11 +117,14 @@ export const generateText = async (prompt: string, options?: GenerateOptions): P
 
       return { text, sources };
     } catch (error: any) {
+      console.warn(`Model ${modelName} failed:`, error.message);
       lastError = error;
-      if (error.message?.includes('429') || error.status === 429) {
-        continue; 
+      // If error is related to API Key, stop retrying immediately
+      if (error.message?.includes("API_KEY") || error.message?.includes("403")) {
+        throw error;
       }
-      throw error;
+      // Continue to next model on other errors
+      continue; 
     }
   }
   throw lastError;
