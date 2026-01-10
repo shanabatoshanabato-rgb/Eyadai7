@@ -53,7 +53,7 @@ export const translations: Record<Language, Record<string, string>> = {
     genShort: "Blog Post",
     processing: "Processing...",
     
-    // Homework Specific
+    // Homework Specific (Requested Keys)
     math: "Mathematics",
     physics: "Physics",
     chemistry: "Chemistry",
@@ -72,7 +72,8 @@ export const translations: Record<Language, Record<string, string>> = {
     stepsTitle: "Step-by-Step",
     theoryTitle: "The Theory",
     tipTitle: "Helpful Tip",
-    
+    subjectLabel: "Subject",
+
     // Legacy mapping
     docs: "Writer Studio", 
     docTitle: "Writer Studio",
@@ -129,7 +130,7 @@ export const translations: Record<Language, Record<string, string>> = {
     genShort: "تدوينة قصيرة",
     processing: "جاري المعالجة...",
 
-    // Homework Specific
+    // Homework Specific (Requested Keys)
     math: "الرياضيات",
     physics: "الفيزياء",
     chemistry: "الكيمياء",
@@ -148,6 +149,7 @@ export const translations: Record<Language, Record<string, string>> = {
     stepsTitle: "خطوات الحل",
     theoryTitle: "المفهوم العلمي",
     tipTitle: "نصيحة إضافية",
+    subjectLabel: "المادة",
 
     // Legacy
     docs: "استوديو الكتابة",
@@ -205,7 +207,7 @@ export const translations: Record<Language, Record<string, string>> = {
     genShort: "بوست صغير",
     processing: "شغال...",
 
-    // Homework Specific
+    // Homework Specific (Requested Keys)
     math: "رياضيات",
     physics: "فيزياء",
     chemistry: "كيمياء",
@@ -224,6 +226,7 @@ export const translations: Record<Language, Record<string, string>> = {
     stepsTitle: "الخطوات",
     theoryTitle: "الفكرة",
     tipTitle: "خد المعلومة دي",
+    subjectLabel: "المادة",
 
     // Legacy
     docs: "أدوات الكتابة",
@@ -300,6 +303,7 @@ export const translations: Record<Language, Record<string, string>> = {
     stepsTitle: "Étapes",
     theoryTitle: "Théorie",
     tipTitle: "Conseil",
+    subjectLabel: "Matière",
 
     // Legacy
     docs: "Studio Écriture",
@@ -343,7 +347,7 @@ export const translations: Record<Language, Record<string, string>> = {
     genTopicPlaceholder: "ej: Energías renovables",
     genLengthLabel: "Longitud",
     genButton: "Generar",
-    irabLabel: "Frase Árabe",
+    irabLabel: "Frase Áرابه",
     irabPlaceholder: "Frase en arabe...",
     irabButton: "Analizar",
     resultOriginal: "Original",
@@ -376,6 +380,7 @@ export const translations: Record<Language, Record<string, string>> = {
     stepsTitle: "Pasos",
     theoryTitle: "Teoría",
     tipTitle: "Consejo",
+    subjectLabel: "Asignatura",
 
     // Legacy
     docs: "Escritura",

@@ -16,43 +16,46 @@ export const VoicePage: React.FC = () => {
   const [isCalling, setIsCalling] = useState(false);
   const [error, setError] = useState<string | null>(null);
   
-  // Refs for managing resources
   const sessionRef = useRef<any>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
   const inputContextRef = useRef<AudioContext | null>(null);
+  const processorRef = useRef<ScriptProcessorNode | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const nextStartTimeRef = useRef<number>(0);
   const sourcesRef = useRef<Set<AudioBufferSourceNode>>(new Set());
   
   const t = useTranslation();
 
-  // Cleanup function to ensure everything stops when leaving the page
-  useEffect(() => {
-    return () => {
-      stopEverything();
-    };
-  }, []);
-
   const stopEverything = () => {
-    // 1. Close the Gemini Session
+    // 1. Force state to false immediately to block pending sends
+    setIsCalling(false);
+
+    // 2. Kill Gemini Session
     if (sessionRef.current) {
-      try { sessionRef.current.close(); } catch(e) { console.warn("Session close error", e); }
+      try { sessionRef.current.close(); } catch(e) {}
       sessionRef.current = null;
     }
 
-    // 2. Stop Microphone Tracks (Hardware)
+    // 3. Stop Microphone Hard
     if (streamRef.current) {
       streamRef.current.getTracks().forEach(track => track.stop());
       streamRef.current = null;
     }
 
-    // 3. Stop All Playing Audio Sources
+    // 4. Disconnect and stop processing
+    if (processorRef.current) {
+      processorRef.current.disconnect();
+      processorRef.current.onaudioprocess = null;
+      processorRef.current = null;
+    }
+
+    // 5. Silence all sources
     sourcesRef.current.forEach(source => {
-      try { source.stop(); } catch(e) {}
+      try { source.stop(); source.disconnect(); } catch(e) {}
     });
     sourcesRef.current.clear();
 
-    // 4. Close Audio Contexts (Silence Output)
+    // 6. Close Contexts
     if (audioContextRef.current) {
       try { audioContextRef.current.close(); } catch(e) {}
       audioContextRef.current = null;
@@ -62,34 +65,45 @@ export const VoicePage: React.FC = () => {
       inputContextRef.current = null;
     }
     
-    // Reset Timer
     nextStartTimeRef.current = 0;
   };
 
+  useEffect(() => {
+    // Handle Tab/Window Change
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'hidden' && sessionRef.current) {
+        stopEverything();
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    window.addEventListener('blur', handleVisibilityChange);
+
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.removeEventListener('blur', handleVisibilityChange);
+      stopEverything();
+    };
+  }, []);
+
   const endCall = () => {
     stopEverything();
-    setIsCalling(false);
   };
 
   const startCall = async () => {
     try {
       setError(null);
-      
       const ai = getAI();
       
-      // Initialize Contexts
       const inputCtx = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 16000 });
       const outputCtx = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 24000 });
       
-      // Store contexts to refs for cleanup
       inputContextRef.current = inputCtx;
       audioContextRef.current = outputCtx;
       
-      // Resume contexts (browser policy)
       await inputCtx.resume();
       await outputCtx.resume();
       
-      // Get Microphone Stream
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       streamRef.current = stream;
 
@@ -100,14 +114,14 @@ export const VoicePage: React.FC = () => {
         model: MODELS.LIVE,
         callbacks: {
           onopen: () => {
-            // Check if context still exists (user might have left)
-            if (!inputContextRef.current) return;
+            if (!inputContextRef.current || !streamRef.current) return;
 
-            const source = inputContextRef.current.createMediaStreamSource(stream);
+            const source = inputContextRef.current.createMediaStreamSource(streamRef.current);
             const processor = inputContextRef.current.createScriptProcessor(4096, 1, 1);
+            processorRef.current = processor;
             
             processor.onaudioprocess = (e) => {
-              if (!sessionRef.current) return; // Don't send if closed
+              if (!sessionRef.current) return;
 
               const inputData = e.inputBuffer.getChannelData(0);
               const int16 = new Int16Array(inputData.length);
@@ -119,27 +133,22 @@ export const VoicePage: React.FC = () => {
                 mimeType: 'audio/pcm;rate=16000',
               };
               
-              sessionPromise.then(session => {
-                if (sessionRef.current) {
-                   session.sendRealtimeInput({ media: pcmBlob });
-                }
-              });
+              if (sessionRef.current) {
+                sessionRef.current.sendRealtimeInput({ media: pcmBlob });
+              }
             };
             
             source.connect(processor);
             processor.connect(inputContextRef.current.destination);
           },
           onmessage: async (message: any) => {
-            // Guard clauses to prevent processing if call ended
             if (!audioContextRef.current || !sessionRef.current) return;
 
             const audioData = message.serverContent?.modelTurn?.parts?.[0]?.inlineData?.data;
             if (audioData) {
               try {
                 const buffer = await decodeAudioData(decode(audioData), audioContextRef.current, 24000, 1);
-                
-                // Double check context before creating source
-                if (!audioContextRef.current) return;
+                if (!audioContextRef.current || !sessionRef.current) return;
                 
                 const source = audioContextRef.current.createBufferSource();
                 source.buffer = buffer;
@@ -150,14 +159,15 @@ export const VoicePage: React.FC = () => {
                 nextStartTimeRef.current += buffer.duration;
                 
                 sourcesRef.current.add(source);
-                source.onended = () => sourcesRef.current.delete(source);
-              } catch (e) {
-                console.error("Error decoding/playing audio", e);
-              }
+                source.onended = () => {
+                   sourcesRef.current.delete(source);
+                   source.disconnect();
+                };
+              } catch (e) {}
             }
             
             if (message.serverContent?.interrupted) {
-              sourcesRef.current.forEach(s => s.stop());
+              sourcesRef.current.forEach(s => { try { s.stop(); s.disconnect(); } catch(e){} });
               sourcesRef.current.clear();
               if (audioContextRef.current) {
                 nextStartTimeRef.current = audioContextRef.current.currentTime;
@@ -165,16 +175,12 @@ export const VoicePage: React.FC = () => {
             }
           },
           onclose: () => {
-            // Only trigger cleanup if we think we are still calling
-            // to avoid infinite loops or state update on unmount
-            if (sessionRef.current) {
-                endCall();
-            }
+            stopEverything();
           },
           onerror: (e) => {
-            console.error("Voice Session Error:", e);
-            setError("Connection disrupted. Please try again.");
-            endCall();
+            console.error("Live Error", e);
+            setError("Unexpected Error. Restarting call...");
+            stopEverything();
           },
         },
         config: {
@@ -190,21 +196,12 @@ export const VoicePage: React.FC = () => {
         }
       });
 
-      // Set state and ref
       setIsCalling(true);
-      sessionPromise.then(session => { 
-        // If user cancelled while connecting
-        if (!isCalling && !streamRef.current) {
-            session.close();
-            return;
-        }
-        sessionRef.current = session; 
-      });
+      sessionRef.current = await sessionPromise;
 
     } catch (err: any) {
-      console.error(err);
-      setError(err.message === "API_KEY_MISSING" ? "API Key is missing." : "Microphone or connection error");
-      endCall();
+      setError("Microphone or connection error");
+      stopEverything();
     }
   };
 
