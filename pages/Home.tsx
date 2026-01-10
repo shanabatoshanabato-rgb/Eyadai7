@@ -6,9 +6,9 @@ import {
   ArrowRight, 
   PhoneCall, 
   BookOpen, 
-  Book, 
+  PenTool, 
   Globe2,
-  ShieldCheck 
+  Feather
 } from 'lucide-react';
 import { useTranslation } from '../translations';
 
@@ -41,23 +41,29 @@ export const Home: React.FC = () => {
 
       {/* Unified Features Bento Grid */}
       <section className="max-w-6xl mx-auto grid grid-cols-1 md:grid-cols-3 gap-6">
-        <div className="md:col-span-2 p-10 bg-emerald-600 rounded-[40px] text-white space-y-6 relative overflow-hidden group">
+        {/* Writing Studio Card (Replaces Docs) */}
+        <div className="md:col-span-2 p-10 bg-indigo-600 rounded-[40px] text-white space-y-6 relative overflow-hidden group">
           <div className="relative z-10">
-            <Book className="w-16 h-16 mb-6 opacity-80" />
-            <h3 className="text-4xl font-black">{t('docs')}</h3>
-            <p className="text-emerald-50 text-lg font-medium leading-relaxed max-w-md">
-              احصل على إجابات شرعية موثقة من القرآن والسنة بأسلوب عصري ومبسط.
+            <PenTool className="w-16 h-16 mb-6 opacity-80" />
+            <h3 className="text-4xl font-black">{t('writing')}</h3>
+            <p className="text-indigo-100 text-lg font-medium leading-relaxed max-w-md">
+              {t('writingSubTitle')}
             </p>
-            <Link to="/docs" className="mt-8 inline-flex items-center gap-2 font-bold hover:gap-4 transition-all bg-white/20 px-6 py-3 rounded-2xl backdrop-blur-lg">
-              ابدأ البحث <ArrowRight className="w-5 h-5" />
+            <div className="flex gap-2 mt-4 flex-wrap">
+              <span className="px-3 py-1 bg-white/10 rounded-lg text-xs font-bold">{t('tabGrammar')}</span>
+              <span className="px-3 py-1 bg-white/10 rounded-lg text-xs font-bold">{t('tabGenerator')}</span>
+              <span className="px-3 py-1 bg-white/10 rounded-lg text-xs font-bold">{t('tabIrab')}</span>
+            </div>
+            <Link to="/writing" className="mt-8 inline-flex items-center gap-2 font-bold hover:gap-4 transition-all bg-white/20 px-6 py-3 rounded-2xl backdrop-blur-lg">
+              {t('startBuilding')} <ArrowRight className="w-5 h-5" />
             </Link>
           </div>
           <div className="absolute top-0 right-0 -mr-20 -mt-20 w-80 h-80 bg-white/10 rounded-full blur-[100px]"></div>
-          <ShieldCheck className="absolute bottom-6 right-6 w-32 h-32 text-white/5" />
+          <Feather className="absolute bottom-6 right-6 w-32 h-32 text-white/5" />
         </div>
 
         <div className="p-8 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-[40px] space-y-6">
-          <BookOpen className="w-12 h-12 text-indigo-500" />
+          <BookOpen className="w-12 h-12 text-blue-500" />
           <h3 className="text-2xl font-black">{t('homework')}</h3>
           <p className="text-slate-500 dark:text-slate-400 font-medium leading-relaxed">
             From math to history, Eyad provides step-by-step solutions instantly.

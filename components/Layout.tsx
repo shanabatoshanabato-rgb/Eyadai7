@@ -9,7 +9,7 @@ import {
   X,
   Sparkles,
   PhoneCall,
-  Book,
+  PenTool,
   BookOpen
 } from 'lucide-react';
 import { useTranslation } from '../translations';
@@ -23,7 +23,7 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
     { name: t('home'), path: '/', icon: Home },
     { name: t('chat'), path: '/chat', icon: MessageSquare },
     { name: t('homework'), path: '/homework', icon: BookOpen },
-    { name: t('docs'), path: '/docs', icon: Book },
+    { name: t('writing'), path: '/writing', icon: PenTool },
     { name: t('voice'), path: '/voice', icon: PhoneCall },
     { name: t('settings'), path: '/settings', icon: SettingsIcon },
   ];
