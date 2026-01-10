@@ -2,12 +2,13 @@
 import { Language, Theme } from './types';
 
 export const DEFAULT_SETTINGS = {
-  language: Language.EN,
+  language: Language.AR,
   theme: Theme.DARK,
-  voiceName: 'Eyad'
+  voiceName: 'eyad' 
 };
 
-export const VOICES = ['Eyad', 'Zephyr', 'Puck', 'Charon', 'Kore', 'Fenrir'];
+// معرفات الأصوات الثابتة (IDs)
+export const VOICE_IDS = ['eyad', 'sarah', 'adam', 'zainab', 'mahmoud', 'ahmed'];
 
 export const MODELS = {
   TEXT: 'gemini-3-flash-preview',
@@ -15,12 +16,15 @@ export const MODELS = {
   LIVE: 'gemini-2.5-flash-native-audio-preview-12-2025'
 };
 
-// Maps our custom names to Gemini prebuilt voices
+/**
+ * خريطة الأصوات التقنية:
+ * تربط المعرف (ID) بالصوت الخاص بجوجل
+ */
 export const VOICE_MAP: Record<string, string> = {
-  'Eyad': 'Fenrir', // Deep, distinct masculine voice
-  'Zephyr': 'Zephyr',
-  'Puck': 'Puck',
-  'Charon': 'Charon',
-  'Kore': 'Kore',
-  'Fenrir': 'Fenrir'
+  'eyad': 'Charon',
+  'sarah': 'Kore',
+  'adam': 'Zephyr',
+  'zainab': 'Kore',
+  'mahmoud': 'Fenrir',
+  'ahmed': 'Puck'
 };

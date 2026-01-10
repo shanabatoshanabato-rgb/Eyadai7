@@ -9,13 +9,22 @@ import {
   Loader2, 
   Book, 
   Sparkles,
-  AlertCircle
+  AlertCircle,
+  Type,
+  Lightbulb
 } from 'lucide-react';
 import { generateText, extractJson } from '../services/geminiService';
 import { useTranslation } from '../translations';
 import { Language } from '../types';
 
-type ToolMode = 'grammar' | 'generator' | 'irab';
+type ToolMode = 'grammar' | 'generator' | 'irab' | 'vocabulary';
+
+interface VocabResult {
+  corrected: string;
+  isCorrect: boolean;
+  alternatives: string[];
+  explanation: string;
+}
 
 export const WritingPage = () => {
   const [mode, setMode] = useState<ToolMode>('grammar');
@@ -30,6 +39,7 @@ export const WritingPage = () => {
   const [grammarResult, setGrammarResult] = useState<{corrected: string, changes: string[]} | null>(null);
   const [genResult, setGenResult] = useState<string | null>(null);
   const [irabResult, setIrabResult] = useState<{word: string, analysis: string}[] | null>(null);
+  const [vocabResult, setVocabResult] = useState<VocabResult | null>(null);
 
   const handleAction = async () => {
     setIsLoading(true);
@@ -37,9 +47,11 @@ export const WritingPage = () => {
     setGrammarResult(null);
     setGenResult(null);
     setIrabResult(null);
+    setVocabResult(null);
 
     const currentLang = localStorage.getItem('eyad-ai-lang') || Language.EN;
-    const isRTL = currentLang === Language.AR || currentLang === Language.EG;
+    // Fix: Property 'EG' does not exist on type 'typeof Language'. Use Language.DIALECT instead.
+    const isRTL = currentLang === Language.AR || currentLang === Language.DIALECT;
     
     try {
       if (mode === 'grammar') {
@@ -91,6 +103,23 @@ export const WritingPage = () => {
           throw new Error("INVALID_IRAB_FORMAT");
         }
         setIrabResult(json);
+      } else if (mode === 'vocabulary') {
+        if (!input.trim()) return;
+        const prompt = `Analyze the spelling and vocabulary of the following text: "${input}". 
+        Check if it's correct. If wrong, correct it. Also suggest 3 better/more professional alternatives.
+        Language: ${currentLang}.
+
+        Output ONLY a valid JSON object:
+        {
+          "corrected": "Correct spelling/form",
+          "isCorrect": true/false,
+          "alternatives": ["Alt 1", "Alt 2", "Alt 3"],
+          "explanation": "Brief note about why this change was suggested or what the word means"
+        }`;
+
+        const res = await generateText(prompt, { systemInstruction: "You are a vocabulary expert. You only output valid JSON." });
+        const json = extractJson(res.text);
+        setVocabResult(json);
       }
     } catch (e: any) {
       console.error(e);
@@ -128,6 +157,7 @@ export const WritingPage = () => {
       <div className="flex flex-wrap justify-center gap-4">
         {[
           { id: 'grammar', label: t('tabGrammar'), icon: Check },
+          { id: 'vocabulary', label: t('tabVocab'), icon: Type },
           { id: 'generator', label: t('tabGenerator'), icon: Wand2 },
           { id: 'irab', label: t('tabIrab'), icon: Languages },
         ].map((tab) => (
@@ -141,6 +171,7 @@ export const WritingPage = () => {
               setGrammarResult(null); 
               setGenResult(null); 
               setIrabResult(null); 
+              setVocabResult(null);
             }}
             className={`px-6 py-4 rounded-2xl flex items-center gap-3 font-bold transition-all border-2 ${
               mode === tab.id 
@@ -156,13 +187,15 @@ export const WritingPage = () => {
 
       <div className="bg-white dark:bg-slate-900 rounded-[2.5rem] p-6 md:p-10 border border-slate-200 dark:border-slate-800 shadow-xl transition-all">
         <div className="space-y-6">
-          {mode === 'grammar' && (
+          {(mode === 'grammar' || mode === 'vocabulary') && (
             <div className="space-y-4">
-              <label className="text-xs font-black uppercase tracking-widest text-slate-400">{t('grammarLabel')}</label>
+              <label className="text-xs font-black uppercase tracking-widest text-slate-400">
+                {mode === 'grammar' ? t('grammarLabel') : t('vocabLabel')}
+              </label>
               <textarea 
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
-                placeholder={t('grammarPlaceholder')}
+                placeholder={mode === 'grammar' ? t('grammarPlaceholder') : t('vocabPlaceholder')}
                 className="w-full p-6 bg-slate-50 dark:bg-slate-800 rounded-3xl border-none outline-none focus:ring-4 focus:ring-indigo-500/10 min-h-[200px] text-lg font-medium dark:text-white resize-none"
               />
             </div>
@@ -222,7 +255,7 @@ export const WritingPage = () => {
             className="w-full py-5 bg-indigo-600 text-white rounded-2xl font-black text-lg hover:bg-indigo-700 shadow-xl shadow-indigo-600/30 flex items-center justify-center gap-3 disabled:opacity-50 disabled:cursor-not-allowed transition-all active:scale-95"
           >
             {isLoading ? <Loader2 className="w-6 h-6 animate-spin" /> : <Sparkles className="w-6 h-6" />}
-            {isLoading ? t('processing') : mode === 'grammar' ? t('fixButton') : mode === 'generator' ? t('genButton') : t('irabButton')}
+            {isLoading ? t('processing') : mode === 'grammar' ? t('fixButton') : mode === 'vocabulary' ? t('vocabButton') : mode === 'generator' ? t('genButton') : t('irabButton')}
           </button>
         </div>
 
@@ -233,7 +266,7 @@ export const WritingPage = () => {
           </div>
         )}
 
-        {(grammarResult || genResult || irabResult) && (
+        {(grammarResult || genResult || irabResult || vocabResult) && (
           <div className="mt-10 pt-10 border-t border-slate-100 dark:border-slate-800 animate-in fade-in slide-in-from-bottom-8">
             {grammarResult && (
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
@@ -263,6 +296,46 @@ export const WritingPage = () => {
                         </ul>
                      </div>
                    )}
+                </div>
+              </div>
+            )}
+
+            {vocabResult && (
+              <div className="space-y-8">
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                  <div className="space-y-4">
+                    <h3 className="font-black text-slate-400 uppercase tracking-widest text-xs">{t('resultOriginal')}</h3>
+                    <div className="p-6 bg-slate-50 dark:bg-slate-800/50 rounded-3xl border border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-400 font-medium">
+                      {input}
+                    </div>
+                  </div>
+                  <div className="space-y-4">
+                    <h3 className="font-black text-green-600 uppercase tracking-widest text-xs">{vocabResult.isCorrect ? "Perfectly Spelled" : t('resultCorrected')}</h3>
+                    <div className="p-6 bg-indigo-50 dark:bg-indigo-900/10 rounded-3xl border border-indigo-100 dark:border-indigo-900/30 text-indigo-700 dark:text-indigo-300 font-black text-xl">
+                      {vocabResult.corrected}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="space-y-4">
+                  <h3 className="font-black text-slate-400 uppercase tracking-widest text-xs flex items-center gap-2">
+                    <Lightbulb className="w-4 h-4 text-amber-500" /> Better Alternatives
+                  </h3>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    {vocabResult.alternatives.map((alt, i) => (
+                      <button 
+                        key={i} 
+                        onClick={() => copyToClipboard(alt)}
+                        className="p-5 bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-700 hover:border-indigo-500 transition-all text-left font-bold text-slate-800 dark:text-white flex justify-between items-center group"
+                      >
+                        {alt}
+                        <Copy className="w-4 h-4 text-slate-300 group-hover:text-indigo-500 opacity-0 group-hover:opacity-100 transition-all" />
+                      </button>
+                    ))}
+                  </div>
+                  <div className="p-4 bg-amber-50 dark:bg-amber-950/20 rounded-2xl border border-amber-100 dark:border-amber-900/30 text-sm text-slate-600 dark:text-slate-400 italic">
+                    {vocabResult.explanation}
+                  </div>
                 </div>
               </div>
             )}

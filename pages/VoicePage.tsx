@@ -5,13 +5,13 @@ import {
   StopCircle, 
   Mic, 
   Zap,
-  Globe,
   Loader2
 } from 'lucide-react';
 import { getAI, decode, decodeAudioData, encode } from '../services/geminiService';
 import { MODELS, VOICE_MAP, DEFAULT_SETTINGS } from '../constants';
 import { Modality } from '@google/genai';
 import { useTranslation } from '../translations';
+import { Language } from '../types';
 
 export const VoicePage: React.FC = () => {
   const [isCalling, setIsCalling] = useState(false);
@@ -66,18 +66,7 @@ export const VoicePage: React.FC = () => {
   };
 
   useEffect(() => {
-    const handleVisibilityChange = () => {
-      if (document.visibilityState === 'hidden') {
-        stopEverything();
-      }
-    };
-    document.addEventListener('visibilitychange', handleVisibilityChange);
-    window.addEventListener('blur', handleVisibilityChange);
-    return () => {
-      document.removeEventListener('visibilitychange', handleVisibilityChange);
-      window.removeEventListener('blur', handleVisibilityChange);
-      stopEverything();
-    };
+    return () => stopEverything();
   }, []);
 
   const startCall = async () => {
@@ -96,7 +85,8 @@ export const VoicePage: React.FC = () => {
       streamRef.current = stream;
 
       const voice = localStorage.getItem('eyad-ai-voice') || DEFAULT_SETTINGS.voiceName;
-      const apiVoiceName = VOICE_MAP[voice] || 'Fenrir';
+      const apiVoiceName = VOICE_MAP[voice] || 'Charon';
+      const currentLang = (localStorage.getItem('eyad-ai-lang') as Language) || Language.AR;
       
       const sessionPromise = ai.live.connect({
         model: MODELS.LIVE,
@@ -151,26 +141,28 @@ export const VoicePage: React.FC = () => {
           tools: [{ googleSearch: {} }],
           responseModalities: [Modality.AUDIO],
           speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: apiVoiceName } } },
-          systemInstruction: `You are Eyad AI, a professional and extremely fast voice assistant.
-          CORE MISSION:
-          1. SPEED: Start responding the millisecond the user stops talking. Avoid any lag.
-          2. RESPONSE LENGTH: Provide moderate-length answers. Not one-word answers, and not long speeches. Aim for 2 to 4 clear, high-quality sentences (approx 30-50 words).
-          3. ACCURACY: Use Google Search for every factual query to ensure you are 100% correct.
-          4. LANGUAGE: Automatically match the user's language and dialect (e.g., if they speak Egyptian Arabic, respond in Egyptian Arabic).
-          5. STYLE: Be helpful, direct, and avoid conversational fillers like "I am searching for you" or "Give me a moment". Just answer.`
+          systemInstruction: `You are Eyad AI, a multi-lingual master assistant.
+          Current System Language Preference: ${currentLang}.
+          
+          DYNAMIC BEHAVIOR RULES:
+          1. DETECT & MATCH: Listen to the user's language and dialect. Respond EXACTLY in the same language and dialect. 
+             If they speak Spanish, respond in Spanish. If they speak Egyptian Arabic, respond in Egyptian. If they speak Gulf Arabic, match that.
+          2. SPEED: Respond instantly. Zero latency is the goal.
+          3. RESPONSE STYLE: Keep answers high-quality but concise (2-4 sentences). 
+          4. SEARCH: Use Google Search to ensure facts are updated and correct.
+          5. NO FILLERS: Never say "Searching..." or "One moment". Just provide the answer as if you already knew it.`
         }
       });
 
       sessionRef.current = await sessionPromise;
     } catch (err: any) {
-      setError("Microphone error or connection failed");
+      setError("Microphone access denied or connection failed.");
       stopEverything();
     }
   };
 
   return (
     <div className="flex-grow flex flex-col items-center justify-center p-4 bg-slate-900 overflow-hidden relative">
-      {/* Background Glow Effect */}
       <div className={`absolute inset-0 transition-opacity duration-1000 ${isCalling ? 'opacity-20' : 'opacity-0'}`}>
         <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[500px] h-[500px] bg-blue-600 rounded-full blur-[120px] animate-pulse"></div>
       </div>
@@ -178,7 +170,7 @@ export const VoicePage: React.FC = () => {
       <div className="max-w-md w-full text-center relative z-10 space-y-12">
         <div className="space-y-4">
           <div className="inline-flex items-center gap-2 px-4 py-2 bg-blue-500/10 rounded-full text-blue-400 text-xs font-black uppercase tracking-widest border border-blue-500/20">
-            <Zap className="w-3.5 h-3.5 fill-blue-400" /> Extreme Low Latency
+            <Zap className="w-3.5 h-3.5 fill-blue-400" /> Multi-Dialect Ready
           </div>
           <h1 className="text-4xl font-black text-white">{t('voice')}</h1>
           {error && <p className="text-red-400 font-bold">{error}</p>}
@@ -195,25 +187,13 @@ export const VoicePage: React.FC = () => {
           {isCalling ? (
             <div className="flex items-center gap-2 h-20">
               {[1, 2, 3, 4, 5, 6].map(i => (
-                <div 
-                  key={i} 
-                  className="w-2.5 bg-blue-500 rounded-full animate-bounce" 
-                  style={{ 
-                    height: '100%', 
-                    animationDuration: '0.6s',
-                    animationDelay: `${i * 0.1}s` 
-                  }} 
-                />
+                <div key={i} className="w-2.5 bg-blue-500 rounded-full animate-bounce" style={{ height: '100%', animationDuration: '0.6s', animationDelay: `${i * 0.1}s` }} />
               ))}
             </div>
           ) : isConnecting ? (
             <Loader2 className="w-16 h-16 text-blue-500 animate-spin" />
           ) : (
             <PhoneCall className="w-16 h-16 text-slate-600" />
-          )}
-          
-          {isCalling && (
-            <div className="absolute -inset-4 border border-blue-500/30 rounded-full animate-ping"></div>
           )}
         </div>
 

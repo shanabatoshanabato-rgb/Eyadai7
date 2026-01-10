@@ -2,7 +2,7 @@
 export enum Language {
   EN = 'en',
   AR = 'ar',
-  EG = 'arz',
+  DIALECT = 'dialect',
   FR = 'fr',
   ES = 'es'
 }
@@ -19,6 +19,13 @@ export interface Message {
   timestamp: number;
   audioUrl?: string;
   sources?: { title: string; uri: string }[];
+}
+
+export interface ChatSession {
+  id: string;
+  title: string;
+  messages: Message[];
+  lastTimestamp: number;
 }
 
 export interface AppSettings {

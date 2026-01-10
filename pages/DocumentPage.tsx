@@ -56,12 +56,14 @@ export const DocumentPage: React.FC = () => {
     setWebSources([]);
 
     const currentLang = localStorage.getItem('eyad-ai-lang') || Language.EN;
-    const isArabic = currentLang === Language.AR || currentLang === Language.EG;
+    // Fix: Property 'EG' does not exist on type 'typeof Language'. Use Language.DIALECT instead.
+    const isArabic = currentLang === Language.AR || currentLang === Language.DIALECT;
     
     const langNames: Record<string, string> = {
       [Language.EN]: "English",
       [Language.AR]: "Standard Arabic",
-      [Language.EG]: "Egyptian Arabic",
+      // Fix: Property 'EG' does not exist on type 'typeof Language'. Use Language.DIALECT instead.
+      [Language.DIALECT]: "Egyptian Arabic",
       [Language.FR]: "French",
       [Language.ES]: "Spanish"
     };

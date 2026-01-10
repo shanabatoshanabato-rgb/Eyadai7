@@ -45,7 +45,7 @@ export const HomeworkPage: React.FC = () => {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const currentLang = localStorage.getItem('eyad-ai-lang') || Language.EN;
-  const isRTL = currentLang === Language.AR || currentLang === Language.EG;
+  const isRTL = currentLang === Language.AR || currentLang === Language.DIALECT;
 
   const subjects = useMemo(() => [
     { id: 'math', label: t('math'), icon: Calculator, color: 'blue' },
@@ -71,7 +71,6 @@ export const HomeworkPage: React.FC = () => {
     setError(null);
     
     try {
-      // Prompt specifically designed to minimize latency and ensure valid JSON
       const systemInstruction = `You are Eyad AI, a world-class academic tutor.
       Target Subject: ${selectedSubject}
       Style: ${tutorType}
@@ -103,7 +102,6 @@ export const HomeworkPage: React.FC = () => {
 
       const json = extractJson(res.text) as SolutionData;
       
-      // Validation check
       if (!json.summary || !Array.isArray(json.steps)) {
         throw new Error("INVALID_JSON_STRUCTURE");
       }
@@ -113,7 +111,7 @@ export const HomeworkPage: React.FC = () => {
       console.error("Homework Solve Failed:", e);
       let msg = "";
       
-      if (currentLang === Language.AR || currentLang === Language.EG) {
+      if (currentLang === Language.AR || currentLang === Language.DIALECT) {
         msg = "معلش حصلت مشكلة وأنا بحل المسألة. اتأكد إن السؤال واضح أو الصورة مش مهزوزة، وجرب تاني.";
       } else {
         msg = "I encountered an error while solving. Please ensure the question is clear and try again.";
@@ -148,7 +146,6 @@ export const HomeworkPage: React.FC = () => {
 
   return (
     <div className="max-w-7xl mx-auto p-4 md:p-8 space-y-10 min-h-screen" dir={isRTL ? 'rtl' : 'ltr'}>
-      {/* Dynamic Title Section */}
       <div className="flex flex-col items-center text-center space-y-4">
         <div className="p-4 bg-blue-600/10 rounded-3xl border border-blue-600/20">
           <BookOpen className="w-12 h-12 text-blue-600" />
@@ -162,7 +159,6 @@ export const HomeworkPage: React.FC = () => {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
-        {/* Left Control Panel */}
         <div className="lg:col-span-4 space-y-6">
           <div className="bg-white dark:bg-slate-900 p-6 rounded-[2.5rem] border border-slate-200 dark:border-slate-800 shadow-xl space-y-8">
             <section className="space-y-4">
@@ -213,7 +209,6 @@ export const HomeworkPage: React.FC = () => {
           </div>
         </div>
 
-        {/* Right Workspace Panel */}
         <div className="lg:col-span-8 space-y-8">
           <div className="bg-white dark:bg-slate-900 p-8 rounded-[3rem] border border-slate-200 dark:border-slate-800 shadow-2xl space-y-8">
             <div className="relative">
@@ -287,7 +282,6 @@ export const HomeworkPage: React.FC = () => {
 
           {solution && (
             <div className="space-y-10 animate-in fade-in slide-in-from-bottom-12 duration-1000 pb-20">
-              {/* Summary Hero Card */}
               <div className="bg-gradient-to-br from-blue-600 to-indigo-700 rounded-[3rem] p-10 text-white shadow-2xl relative overflow-hidden group">
                 <div className="relative z-10 space-y-4">
                   <div className="flex items-center gap-3">
@@ -301,7 +295,6 @@ export const HomeworkPage: React.FC = () => {
                 <div className="absolute top-0 right-0 w-80 h-80 bg-white/10 rounded-full -mr-32 -mt-32 blur-3xl group-hover:scale-125 transition-transform duration-1000"></div>
               </div>
 
-              {/* Detailed Steps Bento Block */}
               <div className="bg-white dark:bg-slate-900 p-10 rounded-[3.5rem] border border-slate-200 dark:border-slate-800 shadow-xl space-y-10">
                 <div className="flex items-center justify-between">
                   <h3 className="text-slate-400 font-black flex items-center gap-3 uppercase tracking-widest text-[10px]">
@@ -329,7 +322,6 @@ export const HomeworkPage: React.FC = () => {
                 </div>
               </div>
 
-              {/* Context Footer Blocks */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                 <div className="bg-indigo-50 dark:bg-indigo-950/30 p-10 rounded-[3rem] border border-indigo-100 dark:border-indigo-900/50 space-y-5">
                   <div className="flex items-center gap-3 text-indigo-600 dark:text-indigo-400">
@@ -352,7 +344,6 @@ export const HomeworkPage: React.FC = () => {
                 </div>
               </div>
 
-              {/* Action Buttons */}
               <div className="flex justify-center pt-8">
                 <button 
                   onClick={() => window.print()} 

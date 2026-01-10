@@ -1,8 +1,8 @@
 
 import React, { useState, useEffect } from 'react';
-import { Settings as SettingsIcon, Sun, Moon, Volume2, Globe, Save, Check, ShieldCheck, ShieldAlert, Activity } from 'lucide-react';
+import { Settings as SettingsIcon, Sun, Moon, Volume2, Globe, Save, Check, Activity, ShieldCheck } from 'lucide-react';
 import { Language, Theme } from '../types';
-import { VOICES, DEFAULT_SETTINGS } from '../constants';
+import { VOICE_IDS, DEFAULT_SETTINGS } from '../constants';
 import { useTranslation } from '../translations';
 import { generateText } from '../services/geminiService';
 
@@ -28,30 +28,17 @@ export const Settings: React.FC = () => {
     }
   }, [theme]);
 
-  const toggleTheme = () => {
-    const newTheme = theme === Theme.LIGHT ? Theme.DARK : Theme.LIGHT;
-    setTheme(newTheme);
-    localStorage.setItem('eyad-ai-theme', newTheme);
-  };
-
   const runDiagnostic = async () => {
-    setDiagnostic({ status: 'checking', message: 'Testing connection to Google AI...' });
+    setDiagnostic({ status: 'checking', message: 'Testing connection...' });
     try {
-      const response = await generateText("Say only 'API is working' to test connection.");
+      const response = await generateText("Test connection");
       if (response && response.text) {
-        setDiagnostic({ status: 'ok', message: 'API is working perfectly! Eyad is ready.' });
+        setDiagnostic({ status: 'ok', message: 'API is working!' });
       } else {
-        setDiagnostic({ status: 'fail', message: 'API returned empty response.' });
+        setDiagnostic({ status: 'fail', message: 'Empty response.' });
       }
     } catch (e: any) {
-      console.error(e);
-      const isMissing = e.message?.includes("API_KEY_MISSING");
-      setDiagnostic({ 
-        status: 'fail', 
-        message: isMissing 
-          ? 'API Key is missing. If on Vercel, add API_KEY to Environment Variables and redeploy.' 
-          : `Connection Failed: ${e.message}` 
-      });
+      setDiagnostic({ status: 'fail', message: `Failed: ${e.message}` });
     }
   };
 
@@ -62,128 +49,138 @@ export const Settings: React.FC = () => {
     setSaved(true);
     setTimeout(() => {
       setSaved(false);
-      if (language !== localStorage.getItem('eyad-ai-lang')) {
-         window.location.reload();
-      }
-    }, 800);
+      window.location.reload();
+    }, 400);
   };
 
   return (
-    <div className="max-w-2xl mx-auto p-4 md:p-8 space-y-8">
-      <div className={`p-6 rounded-[2rem] border transition-all duration-500 flex flex-col md:flex-row items-start md:items-center justify-between gap-4 ${
-        diagnostic.status === 'ok' ? 'bg-green-500/10 border-green-500/20 text-green-600' :
-        diagnostic.status === 'fail' ? 'bg-red-500/10 border-red-500/20 text-red-600' :
-        'bg-blue-600/5 border-blue-600/10 text-blue-600'
-      }`}>
-        <div className="flex items-center gap-4">
-          <div className={`p-3 rounded-2xl ${diagnostic.status === 'ok' ? 'bg-green-500 text-white' : diagnostic.status === 'fail' ? 'bg-red-500 text-white' : 'bg-blue-600 text-white'}`}>
-            {diagnostic.status === 'ok' ? <ShieldCheck /> : diagnostic.status === 'fail' ? <ShieldAlert /> : <Activity />}
-          </div>
-          <div>
-            <p className="font-black text-sm uppercase tracking-widest">System Health</p>
-            <p className="text-sm font-bold opacity-80 leading-tight">{diagnostic.message || 'Check connection status'}</p>
-          </div>
-        </div>
-        <button 
-          onClick={runDiagnostic}
-          disabled={diagnostic.status === 'checking'}
-          className="px-4 py-2 bg-white dark:bg-slate-800 border border-current rounded-xl text-xs font-black uppercase hover:opacity-70 transition-opacity whitespace-nowrap"
-        >
-          {diagnostic.status === 'checking' ? 'Testing...' : 'Test API'}
-        </button>
-      </div>
-
-      <div className="bg-white dark:bg-slate-900 rounded-[2.5rem] p-8 md:p-12 border border-slate-200 dark:border-slate-800 shadow-xl transition-colors">
-        <div className="flex justify-between items-center mb-10">
-          <h2 className="text-3xl font-black flex items-center gap-3 tracking-tighter dark:text-white">
-            <SettingsIcon className="text-blue-500 w-8 h-8" />
+    <div className="max-w-6xl mx-auto p-8 md:p-12 lg:p-16 space-y-16">
+      {/* Header Section */}
+      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-10 border-b border-slate-200 dark:border-slate-800 pb-12">
+        <div className="space-y-4">
+          <h2 className="text-4xl md:text-5xl font-black flex items-center gap-5 tracking-tighter dark:text-white">
+            <SettingsIcon className="text-blue-500 w-12 h-12" />
             {t('preferences')}
           </h2>
+          <p className="text-slate-500 dark:text-slate-400 font-medium text-lg md:text-xl max-w-2xl leading-relaxed">
+            تحكم في تجربة إياد الخاصة بك. التصميم الآن أصبح أكثر توازناً ووضوحاً.
+          </p>
+        </div>
+        
+        <div className="flex items-center gap-6">
           <button
             onClick={saveSettings}
-            className={`px-6 py-3 rounded-2xl font-bold flex items-center gap-2 transition-all active:scale-95 ${
-              saved 
-                ? 'bg-green-500 text-white' 
-                : 'bg-blue-600 text-white hover:bg-blue-700 shadow-lg shadow-blue-600/20'
+            className={`px-10 py-4 rounded-2xl font-black flex items-center gap-4 transition-all text-xl shadow-lg ${
+              saved ? 'bg-green-500 text-white' : 'bg-blue-600 text-white hover:bg-blue-700 shadow-blue-600/20'
             }`}
           >
-            {saved ? <Check className="w-5 h-5" /> : <Save className="w-5 h-5" />}
+            {saved ? <Check className="w-6 h-6" /> : <Save className="w-6 h-6" />}
             {saved ? 'Saved!' : t('saveChanges')}
           </button>
         </div>
+      </div>
 
-        <div className="space-y-10">
-          {/* Theme Section */}
-          <section className="space-y-4">
-            <h3 className="text-xs font-black uppercase tracking-[0.2em] text-slate-400 flex items-center gap-2">
-              <Sun className="w-4 h-4" /> {t('appearance')}
-            </h3>
-            <div className="flex items-center justify-between p-6 bg-slate-50 dark:bg-slate-800/50 rounded-3xl border border-slate-100 dark:border-slate-800">
-              <div className="flex items-center gap-3">
-                {theme === Theme.DARK ? <Moon className="text-blue-400" /> : <Sun className="text-orange-400" />}
-                <div>
-                  <p className="font-black dark:text-white">{theme === Theme.DARK ? 'Dark Mode' : 'Light Mode'}</p>
-                  <p className="text-sm text-slate-500 font-medium">Switch visual theme</p>
-                </div>
-              </div>
-              <button
-                onClick={toggleTheme}
-                className={`w-16 h-9 flex items-center rounded-full p-1 transition-colors ${theme === Theme.DARK ? 'bg-blue-600' : 'bg-slate-300'}`}
-              >
-                <div className={`bg-white w-7 h-7 rounded-full shadow-lg transform transition-transform ${theme === Theme.DARK ? 'translate-x-7' : 'translate-x-0'}`} />
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-12">
+        {/* Left: Info */}
+        <div className="lg:col-span-4 space-y-10">
+          <div className="bg-white dark:bg-slate-900 rounded-[2rem] p-8 border border-slate-200 dark:border-slate-800 shadow-sm space-y-8">
+            <div className="flex items-center gap-4 text-blue-600">
+              <ShieldCheck className="w-8 h-8" />
+              <h3 className="font-black uppercase tracking-widest text-xs">System Health</h3>
+            </div>
+            <p className="text-slate-500 dark:text-slate-400 text-base leading-relaxed">
+              تأكد من استقرار اتصالك بخوادم إياد للحصول على أفضل أداء.
+            </p>
+            
+            <div className={`p-6 rounded-2xl border ${
+              diagnostic.status === 'ok' ? 'bg-green-50 dark:bg-green-900/10 border-green-200' : 'bg-slate-50 dark:bg-slate-800/50 border-slate-100 dark:border-slate-800'
+            }`}>
+              <p className="text-[10px] font-black uppercase text-slate-400 mb-3 tracking-widest">Diagnostic Status</p>
+              <p className="text-lg font-bold dark:text-white mb-6">{diagnostic.message || 'No tests run yet.'}</p>
+              <button onClick={runDiagnostic} className="w-full py-4 bg-blue-600 text-white rounded-xl text-xs font-black uppercase tracking-widest hover:bg-blue-700 transition-all">
+                {diagnostic.status === 'checking' ? 'Testing...' : 'Start Test'}
               </button>
             </div>
-          </section>
+          </div>
+        </div>
 
-          {/* Language Section */}
-          <section className="space-y-4">
-            <h3 className="text-xs font-black uppercase tracking-[0.2em] text-slate-400 flex items-center gap-2">
-              <Globe className="w-4 h-4" /> {t('systemLang')}
-            </h3>
-            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-              {[
-                { id: Language.EN, label: 'English' },
-                { id: Language.AR, label: 'العربية' },
-                { id: Language.EG, label: 'مصري' },
-                { id: Language.FR, label: 'Français' },
-                { id: Language.ES, label: 'Español' }
-              ].map((lang) => (
+        {/* Right: Controls */}
+        <div className="lg:col-span-8 space-y-12">
+          <div className="bg-white dark:bg-slate-900 rounded-[2.5rem] p-10 border border-slate-200 dark:border-slate-800 shadow-sm space-y-16">
+            
+            {/* Appearance Section */}
+            <section className="space-y-8">
+              <h3 className="text-sm font-black uppercase tracking-[0.3em] text-slate-400 flex items-center gap-4">
+                <Sun className="w-5 h-5" /> {t('appearance')}
+              </h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <button
-                  key={lang.id}
-                  onClick={() => setLanguage(lang.id)}
-                  className={`p-4 rounded-2xl border-2 transition-all text-center font-bold text-sm ${
-                    language === lang.id 
-                      ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400' 
-                      : 'border-slate-100 dark:border-slate-800 hover:border-blue-200 dark:hover:border-slate-700 dark:text-slate-400'
-                  }`}
+                  onClick={() => setTheme(Theme.LIGHT)}
+                  className={`p-8 rounded-2xl border-2 transition-all flex items-center gap-5 ${theme === Theme.LIGHT ? 'border-blue-600 bg-blue-50 text-blue-600' : 'border-slate-50 dark:border-slate-800 text-slate-400 hover:border-slate-200'}`}
                 >
-                  {lang.label}
+                  <Sun className="w-10 h-10" />
+                  <span className="text-2xl font-black">Light Mode</span>
                 </button>
-              ))}
-            </div>
-          </section>
+                <button
+                  onClick={() => setTheme(Theme.DARK)}
+                  className={`p-8 rounded-2xl border-2 transition-all flex items-center gap-5 ${theme === Theme.DARK ? 'border-blue-600 bg-slate-800 text-white' : 'border-slate-50 dark:border-slate-800 text-slate-400 hover:border-slate-700'}`}
+                >
+                  <Moon className="w-10 h-10" />
+                  <span className="text-2xl font-black">Dark Mode</span>
+                </button>
+              </div>
+            </section>
 
-          {/* Voice Section */}
-          <section className="space-y-4">
-            <h3 className="text-xs font-black uppercase tracking-[0.2em] text-slate-400 flex items-center gap-2">
-              <Volume2 className="w-4 h-4" /> {t('voiceProfile')}
-            </h3>
-            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-              {VOICES.map(v => (
-                <button
-                  key={v}
-                  onClick={() => setVoice(v)}
-                  className={`p-4 rounded-2xl border-2 transition-all text-center font-bold text-sm ${
-                    voice === v
-                      ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400'
-                      : 'border-slate-100 dark:border-slate-800 hover:border-blue-200 dark:hover:border-slate-700 dark:text-slate-400'
-                  }`}
-                >
-                  {v}
-                </button>
-              ))}
-            </div>
-          </section>
+            {/* Language Section */}
+            <section className="space-y-8">
+              <h3 className="text-sm font-black uppercase tracking-[0.3em] text-slate-400 flex items-center gap-4">
+                <Globe className="w-5 h-5" /> {t('systemLang')}
+              </h3>
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-3">
+                {[
+                  { id: Language.EN, label: 'English' },
+                  { id: Language.AR, label: 'العربية' },
+                  { id: Language.DIALECT, label: 'اللهجات' },
+                  { id: Language.FR, label: 'Français' },
+                  { id: Language.ES, label: 'Español' }
+                ].map((lang) => (
+                  <button
+                    key={lang.id}
+                    onClick={() => setLanguage(lang.id)}
+                    className={`p-4 rounded-xl border-2 transition-all font-black text-sm ${
+                      language === lang.id 
+                        ? 'border-blue-600 bg-blue-50 dark:bg-blue-900/40 text-blue-600 dark:text-blue-400 shadow-md' 
+                        : 'border-slate-50 dark:border-slate-800 text-slate-500 hover:border-slate-200'
+                    }`}
+                  >
+                    {lang.label}
+                  </button>
+                ))}
+              </div>
+            </section>
+
+            {/* Voice Section */}
+            <section className="space-y-8">
+              <h3 className="text-sm font-black uppercase tracking-[0.3em] text-slate-400 flex items-center gap-4">
+                <Volume2 className="w-5 h-5" /> {t('voiceProfile')}
+              </h3>
+              <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                {VOICE_IDS.map(vid => (
+                  <button
+                    key={vid}
+                    onClick={() => setVoice(vid)}
+                    className={`p-6 rounded-2xl border-2 transition-all font-black text-lg text-center ${
+                      voice === vid 
+                        ? 'border-blue-600 bg-blue-50 dark:bg-blue-900/40 text-blue-600 dark:text-blue-400 shadow-md scale-105' 
+                        : 'border-slate-50 dark:border-slate-800 text-slate-500 hover:border-slate-200'
+                    }`}
+                  >
+                    {t(vid)}
+                  </button>
+                ))}
+              </div>
+            </section>
+          </div>
         </div>
       </div>
     </div>

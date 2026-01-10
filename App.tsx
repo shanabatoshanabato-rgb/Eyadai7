@@ -8,16 +8,23 @@ import { WritingPage } from './pages/WritingPage';
 import { VoicePage } from './pages/VoicePage';
 import { Settings } from './pages/Settings';
 import { HomeworkPage } from './pages/HomeworkPage';
-import { Theme } from './types';
+import { Language, Theme } from './types';
 
 const App: React.FC = () => {
   useEffect(() => {
+    // 1. Sync Theme
     const theme = localStorage.getItem('eyad-ai-theme') || Theme.DARK;
-    if (theme === Theme.DARK) {
-      document.documentElement.classList.add('dark');
-    } else {
-      document.documentElement.classList.remove('dark');
-    }
+    document.documentElement.classList.toggle('dark', theme === Theme.DARK);
+
+    // 2. Sync Language & Direction
+    const lang = (localStorage.getItem('eyad-ai-lang') as Language) || Language.AR;
+    const isRTL = lang === Language.AR || lang === Language.DIALECT;
+    
+    document.documentElement.dir = isRTL ? 'rtl' : 'ltr';
+    document.documentElement.lang = lang;
+    
+    // 3. Set Body Class for Font Handling
+    document.body.className = isRTL ? 'arabic-text' : 'english-text';
   }, []);
 
   return (
