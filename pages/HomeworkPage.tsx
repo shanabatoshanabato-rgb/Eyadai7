@@ -6,20 +6,18 @@ import {
   Loader2, 
   CheckCircle2, 
   Image as ImageIcon, 
-  X,
   Brain,
   GraduationCap,
   Sparkles,
-  Search,
   Zap,
   Lightbulb,
   Repeat,
-  PenTool,
   Atom,
   FlaskConical,
   Microscope,
   ScrollText,
-  Calculator
+  Calculator,
+  Languages
 } from 'lucide-react';
 import { generateText } from '../services/geminiService';
 import { useTranslation } from '../translations';
@@ -40,25 +38,25 @@ export const HomeworkPage: React.FC = () => {
   const [image, setImage] = useState<{data: string, mimeType: string} | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Determine current language and direction
   const currentLang = localStorage.getItem('eyad-ai-lang') || Language.EN;
-  const isRTL = currentLang === Language.AR || currentLang === Language.EG;
+  const isArabicFlow = currentLang === Language.AR || currentLang === Language.EG;
 
   // Memoize subjects to react to language changes
   const subjects = useMemo(() => [
-    { id: 'math', label: t('math'), icon: Calculator, color: 'bg-blue-500' },
-    { id: 'physics', label: t('physics'), icon: Atom, color: 'bg-indigo-500' },
-    { id: 'chemistry', label: t('chemistry'), icon: FlaskConical, color: 'bg-green-500' },
-    { id: 'science', label: t('science'), icon: Microscope, color: 'bg-emerald-500' },
-    { id: 'history', label: t('history'), icon: ScrollText, color: 'bg-amber-500' },
-    { id: 'literature', label: t('literature'), icon: BookOpen, color: 'bg-rose-500' },
+    { id: 'math', label: t('math'), icon: Calculator },
+    { id: 'physics', label: t('physics'), icon: Atom },
+    { id: 'chemistry', label: t('chemistry'), icon: FlaskConical },
+    { id: 'science', label: t('science'), icon: Microscope },
+    { id: 'history', label: t('history'), icon: ScrollText },
+    { id: 'arabic', label: t('arabic'), icon: Languages },
+    { id: 'english', label: t('english'), icon: Languages },
   ], [t]);
 
   // Memoize tutor styles
   const tutorTypes = useMemo(() => [
-    { id: 'friendly', label: t('styleFriendly'), icon: Sparkles },
-    { id: 'academic', label: t('styleAcademic'), icon: GraduationCap },
-    { id: 'humorous', label: t('styleHumorous'), icon: Zap },
+    { id: 'friendly', label: t('tutorFriendly'), icon: Sparkles },
+    { id: 'strict', label: t('tutorStrict'), icon: GraduationCap },
+    { id: 'genius', label: t('tutorGenius'), icon: Zap },
   ], [t]);
 
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -106,7 +104,6 @@ export const HomeworkPage: React.FC = () => {
       setSolution(json);
     } catch (e) {
       console.error(e);
-      // Fallback response if JSON fails
       setSolution({
         summary: "Error processing request / حدث خطأ",
         steps: ["Please try again / حاول مرة أخرى"],
@@ -121,7 +118,7 @@ export const HomeworkPage: React.FC = () => {
   return (
     <div 
       className="max-w-6xl mx-auto p-4 md:p-10 space-y-8 min-h-screen" 
-      dir={isRTL ? 'rtl' : 'ltr'}
+      dir={isArabicFlow ? 'rtl' : 'ltr'}
     >
       {/* Header */}
       <div className="text-center space-y-4">
@@ -147,34 +144,38 @@ export const HomeworkPage: React.FC = () => {
                 <button
                   key={sub.id}
                   onClick={() => setSelectedSubject(sub.id)}
-                  className={`p-4 rounded-2xl border-2 transition-all flex flex-col items-center gap-2 text-center ${
+                  className={`p-4 rounded-2xl border-2 transition-all flex items-center gap-2 text-center overflow-hidden ${
+                    isArabicFlow ? 'flex-row' : 'flex-row-reverse'
+                  } ${
                     selectedSubject === sub.id
                     ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400'
                     : 'border-slate-100 dark:border-slate-800 text-slate-500 dark:text-slate-400 hover:border-blue-200'
                   }`}
                 >
-                  <sub.icon className={`w-6 h-6 ${selectedSubject === sub.id ? 'text-blue-600' : 'text-slate-400'}`} />
-                  <span className="text-xs font-bold">{sub.label}</span>
+                  <sub.icon className={`w-5 h-5 flex-shrink-0 ${selectedSubject === sub.id ? 'text-blue-600' : 'text-slate-400'}`} />
+                  <span className="text-xs font-bold truncate flex-grow">{sub.label}</span>
                 </button>
               ))}
             </div>
           </div>
 
           <div className="bg-white dark:bg-slate-900 p-6 rounded-[2rem] border border-slate-200 dark:border-slate-800 shadow-lg">
-            <h3 className="text-sm font-black uppercase tracking-widest text-slate-400 mb-4 px-1">{t('tutorLabel')}</h3>
+            <h3 className="text-sm font-black uppercase tracking-widest text-slate-400 mb-4 px-1">{t('selectTutor')}</h3>
             <div className="space-y-2">
               {tutorTypes.map((type) => (
                 <button
                   key={type.id}
                   onClick={() => setTutorType(type.id)}
-                  className={`w-full flex items-center gap-3 p-3 rounded-xl border-2 transition-all font-bold text-sm ${
+                  className={`w-full flex items-center gap-3 p-4 rounded-xl border-2 transition-all font-bold text-sm ${
+                    isArabicFlow ? 'flex-row' : 'flex-row-reverse'
+                  } ${
                     tutorType === type.id
                     ? 'border-indigo-500 bg-indigo-50 dark:bg-indigo-900/20 text-indigo-600 dark:text-indigo-400'
                     : 'border-slate-100 dark:border-slate-800 text-slate-500 dark:text-slate-400 hover:border-indigo-200'
                   }`}
                 >
-                  <type.icon className="w-4 h-4" />
-                  {type.label}
+                  <type.icon className="w-5 h-5 flex-shrink-0" />
+                  <span className="flex-grow text-start">{type.label}</span>
                 </button>
               ))}
             </div>
@@ -186,14 +187,14 @@ export const HomeworkPage: React.FC = () => {
           <div className="bg-white dark:bg-slate-900 p-6 md:p-8 rounded-[2.5rem] border border-slate-200 dark:border-slate-800 shadow-xl relative overflow-hidden">
             <div className="relative z-10 space-y-6">
               <div className="space-y-3">
-                <label className="text-sm font-black uppercase tracking-widest text-slate-400 px-1">{t('enterQuestion')}</label>
+                <label className="text-sm font-black uppercase tracking-widest text-slate-400 px-1">{t('hwPlaceholder')}</label>
                 <div className="relative group">
-                  <HelpCircle className={`absolute top-6 w-6 h-6 text-slate-400 transition-colors group-focus-within:text-blue-500 ${isRTL ? 'left-6' : 'right-6'}`} />
+                  <HelpCircle className={`absolute top-6 w-6 h-6 text-slate-400 transition-colors group-focus-within:text-blue-500 ${isArabicFlow ? 'left-6' : 'right-6'}`} />
                   <textarea
                     value={question}
                     onChange={(e) => setQuestion(e.target.value)}
-                    placeholder={t('enterQuestion')}
-                    className={`w-full py-6 bg-slate-50 dark:bg-slate-800/50 border-2 border-transparent focus:border-blue-600/20 rounded-[2rem] outline-none text-slate-900 dark:text-white font-bold text-lg shadow-inner transition-all min-h-[160px] resize-none ${isRTL ? 'pl-6 pr-6' : 'pl-6 pr-16'}`}
+                    placeholder={t('hwPlaceholder')}
+                    className={`w-full py-6 bg-slate-50 dark:bg-slate-800/50 border-2 border-transparent focus:border-blue-600/20 rounded-[2rem] outline-none text-slate-900 dark:text-white font-bold text-lg shadow-inner transition-all min-h-[160px] resize-none ${isArabicFlow ? 'pl-16 pr-6' : 'pl-6 pr-16'}`}
                   />
                 </div>
               </div>
@@ -216,7 +217,6 @@ export const HomeworkPage: React.FC = () => {
                 <button 
                   onClick={() => fileInputRef.current?.click()}
                   className="px-6 py-4 rounded-2xl border-2 border-slate-200 dark:border-slate-700 text-slate-500 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors"
-                  title={t('uploadImage')}
                 >
                   <ImageIcon className="w-6 h-6" />
                 </button>
@@ -226,7 +226,7 @@ export const HomeworkPage: React.FC = () => {
                   className="flex-grow bg-blue-600 hover:bg-blue-700 text-white rounded-2xl font-black text-lg shadow-xl shadow-blue-600/30 flex items-center justify-center gap-3 transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {isSolving ? <Loader2 className="w-6 h-6 animate-spin" /> : <Brain className="w-6 h-6" />}
-                  {isSolving ? t('solving') : t('solveButton')}
+                  {isSolving ? t('solving') : t('hwSolve')}
                 </button>
               </div>
             </div>
@@ -236,10 +236,9 @@ export const HomeworkPage: React.FC = () => {
           {solution && (
             <div className="animate-in fade-in slide-in-from-bottom-8 space-y-6">
               
-              {/* Summary Card */}
               <div className="bg-gradient-to-br from-blue-600 to-indigo-700 rounded-[2.5rem] p-8 md:p-10 text-white shadow-2xl relative overflow-hidden">
                 <div className="relative z-10 space-y-4">
-                  <div className="flex items-center gap-3 opacity-80">
+                  <div className={`flex items-center gap-3 opacity-80 ${isArabicFlow ? 'flex-row' : 'flex-row-reverse'}`}>
                     <CheckCircle2 className="w-6 h-6" />
                     <span className="text-xs font-black uppercase tracking-widest">{t('solutionTitle')}</span>
                   </div>
@@ -248,21 +247,19 @@ export const HomeworkPage: React.FC = () => {
                 <div className="absolute top-0 right-0 w-64 h-64 bg-white/10 rounded-full blur-3xl -mr-20 -mt-20"></div>
               </div>
 
-              {/* Steps & Logic Grid */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 
-                {/* Steps */}
                 <div className="md:col-span-2 bg-white dark:bg-slate-900 rounded-[2.5rem] p-8 border border-slate-200 dark:border-slate-800 shadow-lg">
-                   <h3 className="flex items-center gap-2 text-slate-400 font-black uppercase tracking-widest text-xs mb-6">
+                   <h3 className={`flex items-center gap-2 text-slate-400 font-black uppercase tracking-widest text-xs mb-6 ${isArabicFlow ? 'flex-row' : 'flex-row-reverse'}`}>
                      <Repeat className="w-4 h-4" /> {t('stepsTitle')}
                    </h3>
                    <div className="space-y-6">
                      {solution.steps.map((step, idx) => (
-                       <div key={idx} className="flex gap-4">
+                       <div key={idx} className={`flex gap-4 ${isArabicFlow ? 'flex-row' : 'flex-row-reverse'}`}>
                          <div className="flex-shrink-0 w-8 h-8 rounded-full bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 flex items-center justify-center font-black text-sm border border-blue-200 dark:border-blue-800">
                            {idx + 1}
                          </div>
-                         <p className="pt-1 text-slate-700 dark:text-slate-300 font-medium text-lg leading-relaxed">
+                         <p className="pt-1 text-slate-700 dark:text-slate-300 font-medium text-lg leading-relaxed flex-grow text-start">
                            {step}
                          </p>
                        </div>
@@ -270,22 +267,20 @@ export const HomeworkPage: React.FC = () => {
                    </div>
                 </div>
 
-                {/* Theory */}
                 <div className="bg-indigo-50 dark:bg-indigo-900/10 rounded-[2.5rem] p-8 border border-indigo-100 dark:border-indigo-900/30">
-                  <h3 className="flex items-center gap-2 text-indigo-400 font-black uppercase tracking-widest text-xs mb-4">
+                  <h3 className={`flex items-center gap-2 text-indigo-400 font-black uppercase tracking-widest text-xs mb-4 ${isArabicFlow ? 'flex-row' : 'flex-row-reverse'}`}>
                     <BookOpen className="w-4 h-4" /> {t('theoryTitle')}
                   </h3>
-                  <p className="text-indigo-900 dark:text-indigo-200 font-medium leading-relaxed">
+                  <p className="text-indigo-900 dark:text-indigo-200 font-medium leading-relaxed text-start">
                     {solution.theory}
                   </p>
                 </div>
 
-                {/* Tip */}
                 <div className="bg-emerald-50 dark:bg-emerald-900/10 rounded-[2.5rem] p-8 border border-emerald-100 dark:border-emerald-900/30">
-                  <h3 className="flex items-center gap-2 text-emerald-500 font-black uppercase tracking-widest text-xs mb-4">
+                  <h3 className={`flex items-center gap-2 text-emerald-500 font-black uppercase tracking-widest text-xs mb-4 ${isArabicFlow ? 'flex-row' : 'flex-row-reverse'}`}>
                     <Lightbulb className="w-4 h-4" /> {t('tipTitle')}
                   </h3>
-                  <p className="text-emerald-900 dark:text-emerald-200 font-medium leading-relaxed italic">
+                  <p className="text-emerald-900 dark:text-emerald-200 font-medium leading-relaxed italic text-start">
                     "{solution.tip}"
                   </p>
                 </div>
