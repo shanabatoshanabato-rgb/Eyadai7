@@ -31,28 +31,42 @@ export interface AIResponse {
 
 /**
  * Robust JSON extraction utility.
- * Cleans markdown, handles conversational prefixes, and extracts valid JSON objects/arrays.
+ * Cleans markdown, handles conversational prefixes, and extracts valid JSON objects or arrays.
  */
 export const extractJson = (text: string) => {
   try {
-    // 1. Remove markdown code blocks if they exist
-    let cleaned = text.replace(/```json/gi, '').replace(/```/g, '').trim();
+    // 1. Basic cleanup of markdown and whitespace
+    const cleaned = text.replace(/```json/gi, '').replace(/```/g, '').trim();
     
-    // 2. Find the first '{' and last '}'
-    const start = cleaned.indexOf('{');
-    const end = cleaned.lastIndexOf('}');
+    // 2. Identify the outermost structure (object or array)
+    const firstBrace = cleaned.indexOf('{');
+    const firstBracket = cleaned.indexOf('[');
     
-    if (start === -1 || end === -1) {
-      // Check for array format if object fails
-      const arrStart = cleaned.indexOf('[');
-      const arrEnd = cleaned.lastIndexOf(']');
-      if (arrStart !== -1 && arrEnd !== -1) {
-        return JSON.parse(cleaned.substring(arrStart, arrEnd + 1));
-      }
-      throw new Error("NO_JSON_FOUND");
+    // Determine which structure starts first
+    let startChar = '';
+    let endChar = '';
+    let startIdx = -1;
+    let endIdx = -1;
+
+    if (firstBrace !== -1 && (firstBracket === -1 || firstBrace < firstBracket)) {
+      startChar = '{';
+      endChar = '}';
+    } else if (firstBracket !== -1) {
+      startChar = '[';
+      endChar = ']';
+    }
+
+    if (startChar) {
+      startIdx = cleaned.indexOf(startChar);
+      endIdx = cleaned.lastIndexOf(endChar);
+    }
+
+    if (startIdx === -1 || endIdx === -1) {
+      // Fallback: try to parse the cleaned text directly
+      return JSON.parse(cleaned);
     }
     
-    const jsonStr = cleaned.substring(start, end + 1);
+    const jsonStr = cleaned.substring(startIdx, endIdx + 1);
     return JSON.parse(jsonStr);
   } catch (e) {
     console.error("Critical JSON Parse Error:", e, "Input Text:", text);

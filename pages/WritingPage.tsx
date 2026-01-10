@@ -1,5 +1,4 @@
 
-// Add React to imports to fix possible JSX namespace issues
 import React, { useState } from 'react';
 import { 
   PenTool, 
@@ -9,7 +8,8 @@ import {
   Copy, 
   Loader2, 
   Book, 
-  Sparkles
+  Sparkles,
+  AlertCircle
 } from 'lucide-react';
 import { generateText, extractJson } from '../services/geminiService';
 import { useTranslation } from '../translations';
@@ -21,6 +21,7 @@ export const WritingPage = () => {
   const [mode, setMode] = useState<ToolMode>('grammar');
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const t = useTranslation();
 
   const [genTopic, setGenTopic] = useState('');
@@ -32,11 +33,13 @@ export const WritingPage = () => {
 
   const handleAction = async () => {
     setIsLoading(true);
+    setError(null);
     setGrammarResult(null);
     setGenResult(null);
     setIrabResult(null);
 
     const currentLang = localStorage.getItem('eyad-ai-lang') || Language.EN;
+    const isRTL = currentLang === Language.AR || currentLang === Language.EG;
     
     try {
       if (mode === 'grammar') {
@@ -44,30 +47,30 @@ export const WritingPage = () => {
         const prompt = `Act as a professional multi-language editor. Correct the grammar, spelling, and punctuation of the following text. 
         Input text: "${input}"
         
-        Output ONLY valid JSON in this format:
+        Output ONLY a valid JSON object:
         {
           "corrected": "The fully corrected text here",
-          "changes": ["List of brief descriptions of changes made (e.g., 'Fixed typo in word X', 'Added comma')"]
-        }`;
+          "changes": ["Brief description of changes"]
+        }
+        Do not include markdown code blocks.`;
         
-        const res = await generateText(prompt, { systemInstruction: "You are a strict JSON output machine for grammar correction." });
+        const res = await generateText(prompt, { systemInstruction: "You are a professional editor. You only output valid JSON." });
         const json = extractJson(res.text);
         setGrammarResult(json);
 
       } else if (mode === 'generator') {
         if (!genTopic.trim()) return;
         const lengthPrompt = genLength === 'long' 
-          ? "CRITICAL: The article MUST be extremely detailed, extensive, and aim for 3000+ words. Cover every possible angle, use deep analysis, and provide a comprehensive guide." 
+          ? "CRITICAL: The article MUST be extremely detailed, extensive, and aim for 3000+ words." 
           : "Write a standard professional article.";
           
         const prompt = `Act as a world-class author. Write a content piece about: "${genTopic}".
         ${lengthPrompt}
-        Language: Detect from topic or default to ${currentLang}.
-        Format: Markdown (Use # Headings, ## Subheadings, Bullet points).
-        Style: Professional, engaging, and authoritative.
-        `;
+        Language: Detect from topic or use ${currentLang}.
+        Format: Markdown (Use # Headings, ## Subheadings).
+        Style: Professional and authoritative.`;
 
-        const res = await generateText(prompt, { systemInstruction: "You are a professional long-form writer." });
+        const res = await generateText(prompt, { systemInstruction: "You are a long-form content creator." });
         setGenResult(res.text);
 
       } else if (mode === 'irab') {
@@ -75,18 +78,30 @@ export const WritingPage = () => {
         const prompt = `Act as an expert Arabic Linguist (نحوي). Parse the following Arabic sentence word by word (إعراب مفصل).
         Sentence: "${input}"
         
-        Output ONLY valid JSON array:
+        Output ONLY a valid JSON array:
         [
-          { "word": "الكلمة 1", "analysis": "الإعراب التفصيلي هنا" },
-          { "word": "الكلمة 2", "analysis": "الإعراب التفصيلي هنا" }
-        ]`;
+          { "word": "الكلمة", "analysis": "الإعراب التفصيلي" }
+        ]
+        Do not include markdown code blocks or any other text. Only the array.`;
 
-        const res = await generateText(prompt, { systemInstruction: "You are an expert in Arabic Grammar (Nahw)." });
+        const res = await generateText(prompt, { systemInstruction: "You are an expert Arabic grammarian. You only output JSON arrays." });
         const json = extractJson(res.text);
+        
+        if (!Array.isArray(json)) {
+          throw new Error("INVALID_IRAB_FORMAT");
+        }
         setIrabResult(json);
       }
-    } catch (e) {
+    } catch (e: any) {
       console.error(e);
+      let errorMsg = isRTL 
+        ? "عذراً، حدث خطأ أثناء التحليل. يرجى التأكد من الجملة والمحاولة مرة أخرى."
+        : "Sorry, an error occurred during analysis. Please check your input and try again.";
+      
+      if (e.message === "API_KEY_MISSING") {
+        errorMsg = isRTL ? "مفتاح API مفقود. يرجى مراجعة الإعدادات." : "API Key is missing. Check settings.";
+      }
+      setError(errorMsg);
     } finally {
       setIsLoading(false);
     }
@@ -118,7 +133,15 @@ export const WritingPage = () => {
         ].map((tab) => (
           <button
             key={tab.id}
-            onClick={() => { setMode(tab.id as ToolMode); setInput(''); setGenTopic(''); setGrammarResult(null); setGenResult(null); setIrabResult(null); }}
+            onClick={() => { 
+              setMode(tab.id as ToolMode); 
+              setError(null);
+              setInput(''); 
+              setGenTopic(''); 
+              setGrammarResult(null); 
+              setGenResult(null); 
+              setIrabResult(null); 
+            }}
             className={`px-6 py-4 rounded-2xl flex items-center gap-3 font-bold transition-all border-2 ${
               mode === tab.id 
               ? 'bg-indigo-600 text-white border-indigo-600 shadow-xl shadow-indigo-600/20 scale-105' 
@@ -185,6 +208,7 @@ export const WritingPage = () => {
                 type="text"
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && handleAction()}
                 placeholder={t('irabPlaceholder')}
                 className="w-full p-6 bg-slate-50 dark:bg-slate-800 rounded-3xl border-none outline-none focus:ring-4 focus:ring-indigo-500/10 text-2xl font-bold text-center dark:text-white font-serif"
                 dir="rtl"
@@ -201,6 +225,13 @@ export const WritingPage = () => {
             {isLoading ? t('processing') : mode === 'grammar' ? t('fixButton') : mode === 'generator' ? t('genButton') : t('irabButton')}
           </button>
         </div>
+
+        {error && (
+          <div className="mt-8 p-6 bg-red-50 dark:bg-red-950/20 border border-red-200 dark:border-red-900 rounded-2xl flex items-center gap-4 text-red-600 dark:text-red-400 animate-in fade-in slide-in-from-top-4">
+            <AlertCircle className="w-6 h-6 flex-shrink-0" />
+            <p className="font-bold">{error}</p>
+          </div>
+        )}
 
         {(grammarResult || genResult || irabResult) && (
           <div className="mt-10 pt-10 border-t border-slate-100 dark:border-slate-800 animate-in fade-in slide-in-from-bottom-8">
