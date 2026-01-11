@@ -110,34 +110,39 @@ export const ChatPage: React.FC = () => {
     }
   };
 
-  const handleSend = async (retryMsg?: string, retryImg?: {data: string, mimeType: string}) => {
-    if (isSendingRef.current || (!input.trim() && !attachedImage && !retryMsg)) return;
+  const handleSend = async (manualInput?: string) => {
+    // منع تكرار الإرسال
+    if (isSendingRef.current) return;
+    const finalInput = (manualInput || input).trim();
+    if (!finalInput && !attachedImage) return;
     
     isSendingRef.current = true;
     setError(null);
     setIsTyping(true);
 
-    const currentInput = retryMsg || input.trim();
-    const currentImage = retryImg || attachedImage;
-    const userMsgId = Date.now().toString();
-    const userMsg: Message = { id: userMsgId, role: 'user', text: currentInput || (currentImage ? t('imageAttached') : ''), timestamp: Date.now() };
+    const userMsg: Message = { 
+      id: Date.now().toString(), 
+      role: 'user', 
+      text: finalInput || t('imageAttached'), 
+      timestamp: Date.now() 
+    };
 
     let activeId = currentSessionId;
     
-    // حل مشكلة الشات المزدوج: نقوم بإنشاء الجلسة والرسالة معاً إذا لم تكن هناك جلسة نشطة
+    // إنشاء شات جديد فقط إذا لم يكن هناك شات نشط
     if (!activeId) {
-      const newSessionId = Date.now().toString();
+      const newSessionId = "session_" + Date.now();
       const newSession: ChatSession = {
         id: newSessionId,
-        title: currentInput.substring(0, 30) || t('newChat'),
+        title: finalInput.substring(0, 30) || t('newChat'),
         messages: [userMsg],
         lastTimestamp: Date.now()
       };
+      // تحديث الحالة فوراً وبشكل متزامن لمنع التكرار
       setSessions(prev => [newSession, ...prev]);
       setCurrentSessionId(newSessionId);
       activeId = newSessionId;
     } else {
-      // إضافة الرسالة للجلسة الحالية
       setSessions(prev => prev.map(s => s.id === activeId ? {
         ...s,
         messages: [...s.messages, userMsg],
@@ -145,22 +150,23 @@ export const ChatPage: React.FC = () => {
       } : s));
     }
 
-    // تنظيف المدخلات فوراً
-    if (!retryMsg) {
-      setInput('');
-      setAttachedImage(null);
-      if (isListening) toggleListening();
-    }
+    const currentPrompt = finalInput;
+    const currentImg = attachedImage;
+    
+    // تنظيف الواجهة فوراً
+    setInput('');
+    setAttachedImage(null);
+    if (isListening) toggleListening();
 
     try {
-      const aiResponse = await generateText(currentInput || "حلل الصورة المرفقة بدقة", { 
+      const aiResponse = await generateText(currentPrompt || "حلل الصورة بدقة", { 
         useSearch: true,
-        image: currentImage || undefined,
-        systemInstruction: "You are Eyad AI, the fastest and most accurate AI in existence. CRITICAL: For any factual question, news, or history, you MUST use Google Search first. Provide definitive, concise, and 100% accurate information in the user's language or dialect. No hallucinations."
+        image: currentImg || undefined,
+        systemInstruction: "You are Eyad AI, a professional, accurate, and fast assistant. Use Google Search for facts. Respond concisely in the user's language."
       });
       
       const modelMsg: Message = {
-        id: (Date.now() + 5).toString(),
+        id: "model_" + Date.now(),
         role: 'model',
         text: aiResponse.text,
         timestamp: Date.now(),
@@ -168,17 +174,20 @@ export const ChatPage: React.FC = () => {
       };
 
       setSessions(prev => prev.map(s => s.id === activeId ? { 
-        ...s, 
-        messages: [...s.messages, modelMsg], 
-        lastTimestamp: Date.now() 
+        ...s, messages: [...s.messages, modelMsg], lastTimestamp: Date.now() 
       } : s));
     } catch (err: any) {
-      setError("إياد مشغول شوية بالبحث، جرب كمان ثانية...");
-      // في حالة الخطأ، نترك المدخلات ليتمكن المستخدم من إعادة الإرسال بسهولة
-      if (!retryMsg) {
-        setInput(currentInput);
-        setAttachedImage(currentImage);
+      // إظهار أخطاء محددة بدلاً من رسالة عامة
+      if (err.message === "API_KEY_MISSING") {
+        setError("مفتاح الـ API مش مضبوط. راجع الإعدادات.");
+      } else if (err.message === "RATE_LIMIT_EXCEEDED") {
+        setError("إياد عليه ضغط كبير حالياً، استنى ثواني وجرب تاني.");
+      } else {
+        setError("حصلت مشكلة في الاتصال، إياد بيعتذرلك وجرب تبعت تاني.");
       }
+      // إعادة النص للمدخلات في حالة الخطأ لسهولة الإرسال مرة أخرى
+      setInput(currentPrompt);
+      setAttachedImage(currentImg);
     } finally {
       setIsTyping(false);
       isSendingRef.current = false;
@@ -189,6 +198,7 @@ export const ChatPage: React.FC = () => {
     setCurrentSessionId(null);
     setInput('');
     setAttachedImage(null);
+    setError(null);
     if (window.innerWidth < 1024) setIsSidebarOpen(false);
   };
 
@@ -287,7 +297,7 @@ export const ChatPage: React.FC = () => {
             </div>
           ))}
           {isTyping && <div className="flex justify-start"><div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 px-5 py-3 rounded-3xl rounded-tl-none flex gap-3 items-center shadow-sm"><div className="flex gap-1"><div className="w-2 h-2 bg-blue-500 rounded-full animate-bounce [animation-delay:-0.3s]" /><div className="w-2 h-2 bg-blue-500 rounded-full animate-bounce [animation-delay:-0.15s]" /><div className="w-2 h-2 bg-blue-500 rounded-full animate-bounce" /></div><span className="text-[10px] font-black text-slate-400 tracking-widest uppercase">{t('thinking')}</span></div></div>}
-          {error && <div className="p-4 bg-red-50 dark:bg-red-900/20 border-2 border-red-200 dark:border-red-900 rounded-2xl text-red-600 flex items-center gap-4 animate-in shake duration-500"><AlertCircle className="w-6 h-6 flex-shrink-0" /><div className="flex-grow"><p className="text-xs font-black uppercase tracking-widest opacity-60 mb-1">System Alert</p><p className="text-sm font-bold">{error}</p></div><button onClick={() => handleSend()} className="p-2 bg-red-100 dark:bg-red-800 rounded-xl hover:bg-red-200 dark:hover:bg-red-700 transition-colors"><RefreshCcw className="w-5 h-5" /></button></div>}
+          {error && <div className="p-4 bg-red-50 dark:bg-red-900/20 border-2 border-red-200 dark:border-red-900 rounded-2xl text-red-600 flex items-center gap-4 animate-in shake duration-500"><AlertCircle className="w-6 h-6 flex-shrink-0" /><div className="flex-grow"><p className="text-xs font-black uppercase tracking-widest opacity-60 mb-1">System Alert</p><p className="text-sm font-bold">{error}</p></div><button onClick={() => handleSend(messages[messages.length-1]?.text)} className="p-2 bg-red-100 dark:bg-red-800 rounded-xl hover:bg-red-200 dark:hover:bg-red-700 transition-colors"><RefreshCcw className="w-5 h-5" /></button></div>}
           <div ref={scrollRef} />
         </div>
 

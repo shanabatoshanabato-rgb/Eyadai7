@@ -59,11 +59,14 @@ export const extractJson = (text: string) => {
 };
 
 export const generateText = async (prompt: string, options?: GenerateOptions): Promise<AIResponse> => {
-  // استخدام أحدث موديل فلاش للسرعة والدقة معاً
   const modelName = 'gemini-3-flash-preview';
   let lastError: any = null;
 
-  for (let attempt = 0; attempt < 3; attempt++) {
+  // فحص إذا كان السؤال بسيطاً (ترحيب مثلاً) لتجنب تأخير البحث
+  const isGreeting = /^(هلا|مرحبا|سلام|hi|hello|hey|welcome|شكرا|تمام)$/i.test(prompt.trim());
+  const shouldSearch = options?.useSearch && !isGreeting;
+
+  for (let attempt = 0; attempt < 2; attempt++) {
     try {
       const ai = getAI();
       const parts: any[] = [{ text: prompt }];
@@ -75,17 +78,17 @@ export const generateText = async (prompt: string, options?: GenerateOptions): P
       }
 
       const config: any = {
-        systemInstruction: options?.systemInstruction || "You are Eyad AI, a highly accurate, professional, and fast assistant.",
-        temperature: 0.1, // لضمان أقصى درجات الدقة وعدم التخمين
+        systemInstruction: options?.systemInstruction || "You are Eyad AI, a fast and accurate assistant.",
+        temperature: 0.1,
         topP: 0.9,
-        topK: 20,
       };
 
       if (options?.responseMimeType === "application/json") {
         config.responseMimeType = "application/json";
       }
 
-      if (options?.useSearch) {
+      // تفعيل البحث فقط إذا لزم الأمر ولم تكن هناك محاولة ثانية (fallback)
+      if (shouldSearch && attempt === 0) {
         config.tools = [{ googleSearch: {} }];
       }
 
@@ -112,18 +115,15 @@ export const generateText = async (prompt: string, options?: GenerateOptions): P
       return { text, sources };
     } catch (error: any) {
       lastError = error;
-      const status = error.status || (error.message?.includes('429') ? 429 : 500);
-      
-      if (status === 429 || status === 503 || status === 500) {
-        await new Promise(r => setTimeout(r, 1000 * (attempt + 1))); 
-        continue;
-      }
+      // إذا كان الخطأ بسبب البحث أو الضغط، نحاول مرة أخرى بدون بحث فوراً
+      if (attempt === 0) continue;
       break; 
     }
   }
   
   if (lastError?.status === 429) throw new Error("RATE_LIMIT_EXCEEDED");
-  throw lastError || new Error("CONNECTION_ERROR");
+  if (lastError?.message?.includes("API_KEY_MISSING")) throw new Error("API_KEY_MISSING");
+  throw new Error("CONNECTION_ERROR");
 };
 
 export const generateSpeech = async (text: string, voiceName: string = 'Kore'): Promise<string | null> => {
