@@ -23,7 +23,7 @@ import {
   MicOff
 } from 'lucide-react';
 import { generateText, generateSpeech, decode, decodeAudioData } from '../services/geminiService';
-import { Message, ChatSession } from '../types';
+import { Message, ChatSession, Language } from '../types';
 import { VOICE_MAP, DEFAULT_SETTINGS } from '../constants';
 import { useTranslation } from '../translations';
 
@@ -111,37 +111,42 @@ export const ChatPage: React.FC = () => {
   };
 
   const handleSend = async (manualInput?: string) => {
-    // منع تكرار الإرسال
+    // 1. منع الإرسال المتكرر فوراً (Debounce)
     if (isSendingRef.current) return;
+    
     const finalInput = (manualInput || input).trim();
-    if (!finalInput && !attachedImage) return;
+    const currentImg = attachedImage;
+    if (!finalInput && !currentImg) return;
     
     isSendingRef.current = true;
     setError(null);
     setIsTyping(true);
 
     const userMsg: Message = { 
-      id: Date.now().toString(), 
+      id: "u_" + Date.now(), 
       role: 'user', 
       text: finalInput || t('imageAttached'), 
       timestamp: Date.now() 
     };
 
+    // تنظيف المدخلات في الواجهة فوراً لراحة المستخدم
+    setInput('');
+    setAttachedImage(null);
+    if (isListening) toggleListening();
+
+    // 2. إدارة الجلسة بشكل متزامن لمنع التكرار (Double Chat Fix)
     let activeId = currentSessionId;
-    
-    // إنشاء شات جديد فقط إذا لم يكن هناك شات نشط
     if (!activeId) {
-      const newSessionId = "session_" + Date.now();
+      activeId = "s_" + Date.now();
       const newSession: ChatSession = {
-        id: newSessionId,
+        id: activeId,
         title: finalInput.substring(0, 30) || t('newChat'),
         messages: [userMsg],
         lastTimestamp: Date.now()
       };
-      // تحديث الحالة فوراً وبشكل متزامن لمنع التكرار
+      // تحديث مصفوفة الجلسات وتحديد الجلسة النشطة في خطوة واحدة
       setSessions(prev => [newSession, ...prev]);
-      setCurrentSessionId(newSessionId);
-      activeId = newSessionId;
+      setCurrentSessionId(activeId);
     } else {
       setSessions(prev => prev.map(s => s.id === activeId ? {
         ...s,
@@ -150,23 +155,26 @@ export const ChatPage: React.FC = () => {
       } : s));
     }
 
-    const currentPrompt = finalInput;
-    const currentImg = attachedImage;
-    
-    // تنظيف الواجهة فوراً
-    setInput('');
-    setAttachedImage(null);
-    if (isListening) toggleListening();
-
     try {
-      const aiResponse = await generateText(currentPrompt || "حلل الصورة بدقة", { 
+      // 3. استخدام نفس منطق "الفويس" لضمان الدقة والسرعة
+      const currentLang = (localStorage.getItem('eyad-ai-lang') as Language) || Language.AR;
+      
+      const aiResponse = await generateText(finalInput || "حلل الصورة بدقة", { 
         useSearch: true,
         image: currentImg || undefined,
-        systemInstruction: "You are Eyad AI, a professional, accurate, and fast assistant. Use Google Search for facts. Respond concisely in the user's language."
+        systemInstruction: `You are Eyad AI, a multi-lingual master assistant.
+        Current Language Preference: ${currentLang}.
+        
+        DYNAMIC BEHAVIOR (MATCH VOICE MODE):
+        1. SPEED: Respond instantly. Concise is better than long.
+        2. ACCURACY: You MUST use Google Search for facts/news. No guessing.
+        3. DIALECT: If the user speaks in a dialect (Egyptian, Gulf, etc.), respond in the SAME dialect.
+        4. STYLE: Professional yet friendly. Max 3-4 paragraphs unless asked for a long article.
+        5. NO FILLERS: Don't say "Searching..." or "I found this". Just give the answer.`
       });
       
       const modelMsg: Message = {
-        id: "model_" + Date.now(),
+        id: "m_" + Date.now(),
         role: 'model',
         text: aiResponse.text,
         timestamp: Date.now(),
@@ -177,16 +185,8 @@ export const ChatPage: React.FC = () => {
         ...s, messages: [...s.messages, modelMsg], lastTimestamp: Date.now() 
       } : s));
     } catch (err: any) {
-      // إظهار أخطاء محددة بدلاً من رسالة عامة
-      if (err.message === "API_KEY_MISSING") {
-        setError("مفتاح الـ API مش مضبوط. راجع الإعدادات.");
-      } else if (err.message === "RATE_LIMIT_EXCEEDED") {
-        setError("إياد عليه ضغط كبير حالياً، استنى ثواني وجرب تاني.");
-      } else {
-        setError("حصلت مشكلة في الاتصال، إياد بيعتذرلك وجرب تبعت تاني.");
-      }
-      // إعادة النص للمدخلات في حالة الخطأ لسهولة الإرسال مرة أخرى
-      setInput(currentPrompt);
+      setError(err.message === "RATE_LIMIT_EXCEEDED" ? "إياد عليه ضغط كبير، جرب كمان ثانية." : "حصلت مشكلة بسيطة، جرب تبعت تاني.");
+      setInput(finalInput);
       setAttachedImage(currentImg);
     } finally {
       setIsTyping(false);
