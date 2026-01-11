@@ -35,8 +35,7 @@ export const ChatPage: React.FC = () => {
   });
   
   const [currentSessionId, setCurrentSessionId] = useState<string | null>(() => {
-    const lastActive = localStorage.getItem('eyad-ai-active-session');
-    return lastActive || null;
+    return localStorage.getItem('eyad-ai-active-session') || null;
   });
 
   const [input, setInput] = useState('');
@@ -53,6 +52,8 @@ export const ChatPage: React.FC = () => {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
   const recognitionRef = useRef<any>(null);
+  
+  // القفل البرمجي النهائي لمنع تكرار الإرسال
   const isSendingRef = useRef(false);
 
   const currentSession = useMemo(() => 
@@ -110,14 +111,11 @@ export const ChatPage: React.FC = () => {
     }
   };
 
-  const handleSend = async (manualInput?: string) => {
-    // 1. منع الإرسال المتكرر فوراً (Debounce)
-    if (isSendingRef.current) return;
+  const handleSend = async (retryInput?: string) => {
+    const finalInput = (retryInput || input).trim();
+    if (isSendingRef.current || (!finalInput && !attachedImage)) return;
     
-    const finalInput = (manualInput || input).trim();
-    const currentImg = attachedImage;
-    if (!finalInput && !currentImg) return;
-    
+    // تفعيل القفل فوراً
     isSendingRef.current = true;
     setError(null);
     setIsTyping(true);
@@ -129,24 +127,22 @@ export const ChatPage: React.FC = () => {
       timestamp: Date.now() 
     };
 
-    // تنظيف المدخلات في الواجهة فوراً لراحة المستخدم
-    setInput('');
-    setAttachedImage(null);
-    if (isListening) toggleListening();
-
-    // 2. إدارة الجلسة بشكل متزامن لمنع التكرار (Double Chat Fix)
     let activeId = currentSessionId;
+
+    // حالة إنشاء شات جديد: نضمن عدم تكرارها
     if (!activeId) {
-      activeId = "s_" + Date.now();
+      const newId = "s_" + Date.now();
       const newSession: ChatSession = {
-        id: activeId,
+        id: newId,
         title: finalInput.substring(0, 30) || t('newChat'),
         messages: [userMsg],
         lastTimestamp: Date.now()
       };
-      // تحديث مصفوفة الجلسات وتحديد الجلسة النشطة في خطوة واحدة
+      
+      // دمج التحديثات لمنع أي ثغرة زمنية
       setSessions(prev => [newSession, ...prev]);
-      setCurrentSessionId(activeId);
+      setCurrentSessionId(newId);
+      activeId = newId;
     } else {
       setSessions(prev => prev.map(s => s.id === activeId ? {
         ...s,
@@ -155,22 +151,27 @@ export const ChatPage: React.FC = () => {
       } : s));
     }
 
+    const currentPrompt = finalInput;
+    const currentImg = attachedImage;
+
+    // مسح المدخلات فوراً لضمان واجهة سريعة
+    setInput('');
+    setAttachedImage(null);
+    if (isListening) toggleListening();
+
     try {
-      // 3. استخدام نفس منطق "الفويس" لضمان الدقة والسرعة
       const currentLang = (localStorage.getItem('eyad-ai-lang') as Language) || Language.AR;
       
-      const aiResponse = await generateText(finalInput || "حلل الصورة بدقة", { 
+      const aiResponse = await generateText(currentPrompt || "حلل الصورة بدقة", { 
         useSearch: true,
         image: currentImg || undefined,
-        systemInstruction: `You are Eyad AI, a multi-lingual master assistant.
-        Current Language Preference: ${currentLang}.
-        
-        DYNAMIC BEHAVIOR (MATCH VOICE MODE):
-        1. SPEED: Respond instantly. Concise is better than long.
-        2. ACCURACY: You MUST use Google Search for facts/news. No guessing.
-        3. DIALECT: If the user speaks in a dialect (Egyptian, Gulf, etc.), respond in the SAME dialect.
-        4. STYLE: Professional yet friendly. Max 3-4 paragraphs unless asked for a long article.
-        5. NO FILLERS: Don't say "Searching..." or "I found this". Just give the answer.`
+        systemInstruction: `You are Eyad AI, the most precise and fast engineer.
+        Target Language: ${currentLang}.
+        BEHAVIOR:
+        1. Accuracy: Use Google Search for all facts. NEVER hallucinate.
+        2. Speed: Respond as fast as a real human. No fillers.
+        3. Dialect: Match the user's dialect (Egyptian, Saudi, etc.) perfectly.
+        4. Detail: Provide a complete and accurate answer in 2-4 short, high-impact paragraphs.`
       });
       
       const modelMsg: Message = {
@@ -185,8 +186,9 @@ export const ChatPage: React.FC = () => {
         ...s, messages: [...s.messages, modelMsg], lastTimestamp: Date.now() 
       } : s));
     } catch (err: any) {
-      setError(err.message === "RATE_LIMIT_EXCEEDED" ? "إياد عليه ضغط كبير، جرب كمان ثانية." : "حصلت مشكلة بسيطة، جرب تبعت تاني.");
-      setInput(finalInput);
+      setError("إياد مشغول شوية، حاول كمان ثانية.");
+      // إعادة النص للمدخلات في حالة الخطأ لسهولة المحاولة مرة أخرى
+      setInput(currentPrompt);
       setAttachedImage(currentImg);
     } finally {
       setIsTyping(false);
@@ -195,6 +197,7 @@ export const ChatPage: React.FC = () => {
   };
 
   const createNewSession = () => {
+    if (isSendingRef.current) return;
     setCurrentSessionId(null);
     setInput('');
     setAttachedImage(null);

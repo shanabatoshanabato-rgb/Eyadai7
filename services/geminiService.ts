@@ -31,27 +31,12 @@ export interface AIResponse {
 export const extractJson = (text: string) => {
   try {
     let cleaned = text.trim();
-    const startBrace = cleaned.indexOf('{');
-    const startBracket = cleaned.indexOf('[');
-    const endBrace = cleaned.lastIndexOf('}');
-    const endBracket = cleaned.lastIndexOf(']');
-
-    let start = -1;
-    let end = -1;
-
-    if (startBrace !== -1 && (startBracket === -1 || startBrace < startBracket)) {
-      start = startBrace;
-      end = endBrace;
-    } else if (startBracket !== -1) {
-      start = startBracket;
-      end = endBracket;
-    }
-
-    if (start !== -1 && end !== -1 && end > start) {
-      const jsonStr = cleaned.substring(start, end + 1);
-      return JSON.parse(jsonStr);
-    }
     cleaned = cleaned.replace(/```json/gi, '').replace(/```/g, '').trim();
+    const start = cleaned.indexOf('{') !== -1 ? cleaned.indexOf('{') : cleaned.indexOf('[');
+    const end = cleaned.lastIndexOf('}') !== -1 ? cleaned.lastIndexOf('}') : cleaned.lastIndexOf(']');
+    if (start !== -1 && end !== -1) {
+      return JSON.parse(cleaned.substring(start, end + 1));
+    }
     return JSON.parse(cleaned);
   } catch (e) {
     throw new Error("FAILED_TO_PARSE_JSON");
@@ -60,70 +45,54 @@ export const extractJson = (text: string) => {
 
 export const generateText = async (prompt: string, options?: GenerateOptions): Promise<AIResponse> => {
   const modelName = 'gemini-3-flash-preview';
-  let lastError: any = null;
-
-  // فحص إذا كان السؤال بسيطاً (ترحيب مثلاً) لتجنب تأخير البحث
-  const isGreeting = /^(هلا|مرحبا|سلام|hi|hello|hey|welcome|شكرا|تمام)$/i.test(prompt.trim());
-  const shouldSearch = options?.useSearch && !isGreeting;
-
-  for (let attempt = 0; attempt < 2; attempt++) {
-    try {
-      const ai = getAI();
-      const parts: any[] = [{ text: prompt }];
-      
-      if (options?.image) {
-        parts.push({
-          inlineData: { data: options.image.data, mimeType: options.image.mimeType }
-        });
-      }
-
-      const config: any = {
-        systemInstruction: options?.systemInstruction || "You are Eyad AI, a fast and accurate assistant.",
-        temperature: 0.1,
-        topP: 0.9,
-      };
-
-      if (options?.responseMimeType === "application/json") {
-        config.responseMimeType = "application/json";
-      }
-
-      // تفعيل البحث فقط إذا لزم الأمر ولم تكن هناك محاولة ثانية (fallback)
-      if (shouldSearch && attempt === 0) {
-        config.tools = [{ googleSearch: {} }];
-      }
-
-      const response = await ai.models.generateContent({
-        model: modelName,
-        contents: { parts },
-        config
-      });
-
-      if (!response.text) throw new Error("EMPTY_RESPONSE");
-
-      const text = response.text;
-      const sources: { title: string; uri: string }[] = [];
-      const chunks = response.candidates?.[0]?.groundingMetadata?.groundingChunks;
-      
-      if (chunks) {
-        chunks.forEach((chunk: any) => {
-          if (chunk.web?.uri) {
-            sources.push({ title: chunk.web.title || chunk.web.uri, uri: chunk.web.uri });
-          }
-        });
-      }
-
-      return { text, sources };
-    } catch (error: any) {
-      lastError = error;
-      // إذا كان الخطأ بسبب البحث أو الضغط، نحاول مرة أخرى بدون بحث فوراً
-      if (attempt === 0) continue;
-      break; 
-    }
-  }
   
-  if (lastError?.status === 429) throw new Error("RATE_LIMIT_EXCEEDED");
-  if (lastError?.message?.includes("API_KEY_MISSING")) throw new Error("API_KEY_MISSING");
-  throw new Error("CONNECTION_ERROR");
+  // فحص الكلمات البسيطة لزيادة السرعة (هلا، مرحبا، الخ)
+  const simplePrompts = /^(هلا|مرحبا|سلام|كيفك|شكرا|تمام|hi|hello|hey|thanks)$/i.test(prompt.trim());
+  
+  try {
+    const ai = getAI();
+    const parts: any[] = [{ text: prompt }];
+    if (options?.image) {
+      parts.push({ inlineData: { data: options.image.data, mimeType: options.image.mimeType } });
+    }
+
+    const config: any = {
+      systemInstruction: options?.systemInstruction || "You are Eyad AI, a high-precision and extremely fast assistant.",
+      temperature: 0.1, // لضمان أقصى دقة
+      topP: 0.95,
+    };
+
+    if (options?.responseMimeType === "application/json") config.responseMimeType = "application/json";
+
+    // تفعيل البحث فقط إذا لم تكن كلمة بسيطة
+    if (options?.useSearch && !simplePrompts) {
+      config.tools = [{ googleSearch: {} }];
+    }
+
+    const response = await ai.models.generateContent({
+      model: modelName,
+      contents: { parts },
+      config
+    });
+
+    if (!response.text) throw new Error("EMPTY_RESPONSE");
+
+    const sources: { title: string; uri: string }[] = [];
+    const chunks = response.candidates?.[0]?.groundingMetadata?.groundingChunks;
+    if (chunks) {
+      chunks.forEach((chunk: any) => {
+        if (chunk.web?.uri) sources.push({ title: chunk.web.title || chunk.web.uri, uri: chunk.web.uri });
+      });
+    }
+
+    return { text: response.text, sources };
+  } catch (error: any) {
+    // محاولة أخيرة سريعة بدون بحث في حال حدوث أي خطأ (Fallback)
+    if (options?.useSearch) {
+      return generateText(prompt, { ...options, useSearch: false });
+    }
+    throw error;
+  }
 };
 
 export const generateSpeech = async (text: string, voiceName: string = 'Kore'): Promise<string | null> => {
