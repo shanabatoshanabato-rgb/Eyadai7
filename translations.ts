@@ -82,12 +82,8 @@ export const translations: Record<Language, Record<string, string>> = {
     deleteChat: "Remove",
     clearHistory: "Reset All",
     rename: "Rename",
-    eyad: "Eyad",
-    sarah: "Sarah",
-    adam: "Adam",
-    zainab: "Zainab",
-    mahmoud: "Mahmoud",
-    ahmed: "Ahmed"
+    adam: "Adam (Boy)",
+    sarah: "Sarah (Girl)"
   },
   [Language.AR]: {
     home: "الرئيسية",
@@ -169,12 +165,8 @@ export const translations: Record<Language, Record<string, string>> = {
     deleteChat: "حذف",
     clearHistory: "مسح الكل",
     rename: "تسمية",
-    eyad: "إياد",
-    sarah: "سارة",
-    adam: "آدم",
-    zainab: "زينب",
-    mahmoud: "محمود",
-    ahmed: "أحمد"
+    adam: "آدم (ولد)",
+    sarah: "سارة (بنت)"
   },
   [Language.DIALECT]: {
     home: "الرئيسية",
@@ -256,12 +248,8 @@ export const translations: Record<Language, Record<string, string>> = {
     deleteChat: "امسح",
     clearHistory: "امسح كله",
     rename: "تعديل",
-    eyad: "إياد",
-    sarah: "سارة",
-    adam: "آدم",
-    zainab: "زينب",
-    mahmoud: "محمود",
-    ahmed: "أحمد"
+    adam: "آدم (ولد)",
+    sarah: "سارة (بنت)"
   },
   [Language.FR]: {
     home: "Accueil",
@@ -271,7 +259,7 @@ export const translations: Record<Language, Record<string, string>> = {
     settings: "Paramètres",
     heroTitle: "Tout sur l'IA.",
     heroSubtitle: "Savoir Redéfini.",
-    heroDesc: "Eyad AI est votre partenaire intelligent pour écrire, résoudre des devoirs et converser.",
+    heroDesc: "Eyad AI is your intelligent partner for writing, solving homework, and conversing.",
     startChat: "Démarrer",
     configuration: "Configuration",
     homework: "Aide Devoirs",
@@ -343,12 +331,8 @@ export const translations: Record<Language, Record<string, string>> = {
     deleteChat: "Supprimer",
     clearHistory: "Réinitialiser",
     rename: "Renommer",
-    eyad: "Eyad",
-    sarah: "Sarah",
-    adam: "Adam",
-    zainab: "Zainab",
-    mahmoud: "Mahmoud",
-    ahmed: "Ahmed"
+    adam: "Adam (Garçon)",
+    sarah: "Sarah (Fille)"
   },
   [Language.ES]: {
     home: "Inicio",
@@ -430,12 +414,8 @@ export const translations: Record<Language, Record<string, string>> = {
     deleteChat: "Eliminar",
     clearHistory: "Limpiar",
     rename: "Renombrar",
-    eyad: "Eyad",
-    sarah: "Sarah",
-    adam: "Adam",
-    zainab: "Zainab",
-    mahmoud: "Mahmoud",
-    ahmed: "Ahmed"
+    adam: "Adam (Chico)",
+    sarah: "Sarah (Chica)"
   }
 };
 

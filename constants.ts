@@ -4,11 +4,11 @@ import { Language, Theme } from './types';
 export const DEFAULT_SETTINGS = {
   language: Language.AR,
   theme: Theme.DARK,
-  voiceName: 'eyad' 
+  voiceName: 'adam' 
 };
 
-// معرفات الأصوات الثابتة (IDs)
-export const VOICE_IDS = ['eyad', 'sarah', 'adam', 'zainab', 'mahmoud', 'ahmed'];
+// معرفات الأصوات المتاحة (فقط آدم وسارة)
+export const VOICE_IDS = ['adam', 'sarah'];
 
 export const MODELS = {
   TEXT: 'gemini-3-flash-preview',
@@ -18,13 +18,10 @@ export const MODELS = {
 
 /**
  * خريطة الأصوات التقنية:
- * تربط المعرف (ID) بالصوت الخاص بجوجل
+ * آدم (Zephyr - صوت ذكر)
+ * سارة (Kore - صوت أنثى)
  */
 export const VOICE_MAP: Record<string, string> = {
-  'eyad': 'Charon',
-  'sarah': 'Kore',
   'adam': 'Zephyr',
-  'zainab': 'Kore',
-  'mahmoud': 'Fenrir',
-  'ahmed': 'Puck'
+  'sarah': 'Kore'
 };
