@@ -59,7 +59,7 @@ export const extractJson = (text: string) => {
 };
 
 export const generateText = async (prompt: string, options?: GenerateOptions): Promise<AIResponse> => {
-  // استخدام gemini-3-flash-preview للسرعة القصوى
+  // استخدام gemini-3-flash-preview للسرعة القصوى والاستقرار
   const modelName = 'gemini-3-flash-preview';
   let lastError: any = null;
 
@@ -76,7 +76,7 @@ export const generateText = async (prompt: string, options?: GenerateOptions): P
 
       const config: any = {
         systemInstruction: options?.systemInstruction || "You are Eyad AI, a highly accurate and professional assistant.",
-        temperature: 0.3, // تقليل القيمة لزيادة الدقة وتقليل التخريف (Hallucination)
+        temperature: 0.1, // أقل قيمة ممكنة لضمان الدقة المعلوماتية وعدم التخمين
         topP: 0.8,
         topK: 40,
       };
@@ -85,7 +85,7 @@ export const generateText = async (prompt: string, options?: GenerateOptions): P
         config.responseMimeType = "application/json";
       }
 
-      // تفعيل البحث لضمان تحديث المعلومات
+      // تفعيل البحث لضمان تحديث المعلومات ودقتها
       if (options?.useSearch) {
         config.tools = [{ googleSearch: {} }];
       }
@@ -134,7 +134,7 @@ export const generateSpeech = async (text: string, voiceName: string = 'Kore'): 
       model: MODELS.AUDIO,
       contents: [{ parts: [{ text }] }],
       config: {
-        responseModalalities: [Modality.AUDIO],
+        responseModalities: [Modality.AUDIO], // تم تصحيح الكلمة هنا لإنهاء خطأ الـ Build
         speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName } } }
       }
     });
