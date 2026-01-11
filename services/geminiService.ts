@@ -59,7 +59,7 @@ export const extractJson = (text: string) => {
 };
 
 export const generateText = async (prompt: string, options?: GenerateOptions): Promise<AIResponse> => {
-  // استخدام gemini-3-flash-preview لجميع المهام لضمان أعلى استقرار وأقل معدل خطأ 429
+  // استخدام gemini-3-flash-preview للسرعة القصوى
   const modelName = 'gemini-3-flash-preview';
   let lastError: any = null;
 
@@ -75,15 +75,17 @@ export const generateText = async (prompt: string, options?: GenerateOptions): P
       }
 
       const config: any = {
-        systemInstruction: options?.systemInstruction || "You are Eyad AI, a helpful assistant.",
-        temperature: 0.7,
+        systemInstruction: options?.systemInstruction || "You are Eyad AI, a highly accurate and professional assistant.",
+        temperature: 0.3, // تقليل القيمة لزيادة الدقة وتقليل التخريف (Hallucination)
+        topP: 0.8,
+        topK: 40,
       };
 
       if (options?.responseMimeType === "application/json") {
         config.responseMimeType = "application/json";
       }
 
-      // تفعيل البحث فقط إذا طلب المستخدم ذلك
+      // تفعيل البحث لضمان تحديث المعلومات
       if (options?.useSearch) {
         config.tools = [{ googleSearch: {} }];
       }
@@ -113,9 +115,8 @@ export const generateText = async (prompt: string, options?: GenerateOptions): P
       lastError = error;
       const status = error.status || (error.message?.includes('429') ? 429 : 500);
       
-      // إذا كان الخطأ هو Busy، انتظر قليلاً وجرب مرة أخرى
       if (status === 429 || status === 503 || status === 500) {
-        await new Promise(r => setTimeout(r, 800 * (attempt + 1))); 
+        await new Promise(r => setTimeout(r, 500 * (attempt + 1))); 
         continue;
       }
       break; 
@@ -133,7 +134,7 @@ export const generateSpeech = async (text: string, voiceName: string = 'Kore'): 
       model: MODELS.AUDIO,
       contents: [{ parts: [{ text }] }],
       config: {
-        responseModalities: [Modality.AUDIO],
+        responseModalalities: [Modality.AUDIO],
         speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName } } }
       }
     });

@@ -146,11 +146,10 @@ export const ChatPage: React.FC = () => {
     setIsTyping(true);
 
     try {
-      // المحاولة الأولى مع البحث، إذا فشل السيرفر نجرب بدون بحث تلقائياً
       const aiResponse = await generateText(currentInput || "حلل الصورة", { 
         useSearch: !retryWithoutSearch,
         image: currentImage || undefined,
-        systemInstruction: "You are Eyad AI, a multi-dialect master. Use Google Search to give accurate facts. Be direct and helpful."
+        systemInstruction: "You are Eyad AI, a highly accurate and fast master assistant. CRITICAL: You MUST use Google Search for every factual query to ensure 100% accuracy. Never invent information. If unsure, state clearly. Respond in the user's language/dialect with professional precision."
       });
       
       const modelMsg: Message = {
@@ -166,7 +165,6 @@ export const ChatPage: React.FC = () => {
       } : s));
     } catch (err: any) {
       if (err.message === "RATE_LIMIT_EXCEEDED" && !retryWithoutSearch) {
-        // إذا كان السيرفر مشغول بالبحث، جرب مرة تانية فوراً بس بدون بحث عشان نضمن رد سريع
         handleSend(true);
         return;
       }
