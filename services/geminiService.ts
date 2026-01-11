@@ -1,5 +1,5 @@
 
-import { GoogleGenAI, Modality } from "@google/genai";
+import { GoogleGenAI, Modality, GenerateContentResponse } from "@google/genai";
 import { MODELS } from "../constants";
 
 const getApiKey = () => {
@@ -14,6 +14,10 @@ export const getAI = () => {
   return new GoogleGenAI({ apiKey });
 };
 
+/**
+ * Interface for generation options.
+ * Added responseMimeType to allow JSON mode configuration as required by some pages.
+ */
 interface GenerateOptions {
   systemInstruction?: string;
   image?: { data: string; mimeType: string };
@@ -26,6 +30,110 @@ export interface AIResponse {
   sources: { title: string; uri: string }[];
 }
 
+/**
+ * وظيفة البث المباشر (Streaming) للحصول على أسرع استجابة ممكنة
+ */
+export async function* generateTextStream(prompt: string, options?: GenerateOptions) {
+  const ai = getAI();
+  const modelName = 'gemini-3-flash-preview';
+  
+  const isSimple = /^(هلا|مرحبا|سلام|كيفك|اخبارك|مين انت|شكرا|تمام|اوكي|ماشي|hi|hello|hey|thanks|ok|who are you)$/i.test(prompt.trim());
+  
+  const parts: any[] = [{ text: prompt }];
+  if (options?.image) {
+    parts.push({ inlineData: { data: options.image.data, mimeType: options.image.mimeType } });
+  }
+
+  // Pass responseMimeType if provided in options
+  const config: any = {
+    systemInstruction: options?.systemInstruction || "You are Eyad AI, a high-speed, accurate engineer.",
+    temperature: 0.1,
+    topP: 0.9,
+    responseMimeType: options?.responseMimeType,
+  };
+
+  // تفعيل البحث فقط للأسئلة التي تحتاج معلومة خارجية
+  if (options?.useSearch && !isSimple) {
+    config.tools = [{ googleSearch: {} }];
+  }
+
+  try {
+    const result = await ai.models.generateContentStream({
+      model: modelName,
+      contents: { parts },
+      config
+    });
+
+    let fullText = "";
+    let sources: { title: string; uri: string }[] = [];
+
+    for await (const chunk of result) {
+      const text = chunk.text || "";
+      fullText += text;
+      
+      // استخراج المصادر إذا وجدت في أي جزء من البث
+      const groundingMetadata = (chunk as any).candidates?.[0]?.groundingMetadata;
+      if (groundingMetadata?.groundingChunks) {
+        groundingMetadata.groundingChunks.forEach((c: any) => {
+          if (c.web?.uri) {
+            const exists = sources.find(s => s.uri === c.web.uri);
+            if (!exists) sources.push({ title: c.web.title || c.web.uri, uri: c.web.uri });
+          }
+        });
+      }
+
+      yield { text, fullText, sources, done: false };
+    }
+
+    yield { text: "", fullText, sources, done: true };
+  } catch (error: any) {
+    // Fallback في حالة فشل البحث أو الضغط
+    if (options?.useSearch) {
+      const fallback = await ai.models.generateContentStream({
+        model: modelName,
+        contents: { parts },
+        config: { ...config, tools: [] }
+      });
+      let ft = "";
+      for await (const c of fallback) {
+        ft += c.text;
+        yield { text: c.text, fullText: ft, sources: [], done: false };
+      }
+      yield { text: "", fullText: ft, sources: [], done: true };
+    } else {
+      throw error;
+    }
+  }
+}
+
+/**
+ * الدالة القديمة للإبقاء على التوافق مع صفحات أخرى (مثل Homework)
+ * Updated to accept and forward responseMimeType to the Gemini API config.
+ */
+export const generateText = async (prompt: string, options?: GenerateOptions): Promise<AIResponse> => {
+  const ai = getAI();
+  const parts: any[] = [{ text: prompt }];
+  if (options?.image) parts.push({ inlineData: { data: options.image.data, mimeType: options.image.mimeType } });
+  
+  const response = await ai.models.generateContent({
+    model: 'gemini-3-flash-preview',
+    contents: { parts },
+    config: {
+      systemInstruction: options?.systemInstruction,
+      temperature: 0.1,
+      tools: options?.useSearch ? [{ googleSearch: {} }] : [],
+      responseMimeType: options?.responseMimeType,
+    }
+  });
+
+  const sources: any[] = [];
+  response.candidates?.[0]?.groundingMetadata?.groundingChunks?.forEach((c: any) => {
+    if (c.web) sources.push({ title: c.web.title, uri: c.web.uri });
+  });
+
+  return { text: response.text || "", sources };
+};
+
 export const extractJson = (text: string) => {
   try {
     let cleaned = text.trim().replace(/```json/gi, '').replace(/```/g, '').trim();
@@ -35,62 +143,6 @@ export const extractJson = (text: string) => {
     return JSON.parse(cleaned);
   } catch (e) {
     throw new Error("FAILED_TO_PARSE_JSON");
-  }
-};
-
-/**
- * دالة توليد النصوص المطورة: تضمن السرعة القصوى مع حماية ضد أخطاء 429 أو تعليق البحث
- */
-export const generateText = async (prompt: string, options?: GenerateOptions): Promise<AIResponse> => {
-  const ai = getAI();
-  const modelName = 'gemini-3-flash-preview';
-  
-  // الكلمات التي تتطلب سرعة خارقة وبدون بحث
-  const isSimple = /^(هلا|مرحبا|سلام|كيفك|اخبارك|مين انت|شكرا|تمام|اوكي|ماشي|hi|hello|hey|thanks|ok|who are you)$/i.test(prompt.trim());
-  
-  const executeRequest = async (withSearch: boolean): Promise<AIResponse> => {
-    const parts: any[] = [{ text: prompt }];
-    if (options?.image) {
-      parts.push({ inlineData: { data: options.image.data, mimeType: options.image.mimeType } });
-    }
-
-    const config: any = {
-      systemInstruction: options?.systemInstruction || "You are Eyad AI, a high-precision and extremely fast assistant.",
-      temperature: 0.1,
-      topP: 0.9,
-    };
-
-    if (options?.responseMimeType === "application/json") config.responseMimeType = "application/json";
-    if (withSearch) config.tools = [{ googleSearch: {} }];
-
-    const response = await ai.models.generateContent({
-      model: modelName,
-      contents: { parts },
-      config
-    });
-
-    if (!response.text) throw new Error("EMPTY_RESPONSE");
-
-    const sources: { title: string; uri: string }[] = [];
-    const chunks = response.candidates?.[0]?.groundingMetadata?.groundingChunks;
-    if (chunks) {
-      chunks.forEach((chunk: any) => {
-        if (chunk.web?.uri) sources.push({ title: chunk.web.title || chunk.web.uri, uri: chunk.web.uri });
-      });
-    }
-
-    return { text: response.text, sources };
-  };
-
-  try {
-    // المحاولة الأولى: مع البحث إذا طُلب ولم تكن الكلمة بسيطة
-    return await executeRequest(options?.useSearch && !isSimple ? true : false);
-  } catch (error: any) {
-    // إذا حدث أي خطأ (ضغط، 429، فشل بحث)، جرب فوراً بدون بحث كـ Fallback
-    if (options?.useSearch && !isSimple) {
-      return await executeRequest(false);
-    }
-    throw error;
   }
 };
 

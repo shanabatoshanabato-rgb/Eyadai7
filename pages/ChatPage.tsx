@@ -22,7 +22,7 @@ import {
   Mic,
   MicOff
 } from 'lucide-react';
-import { generateText, generateSpeech, decode, decodeAudioData } from '../services/geminiService';
+import { generateTextStream, generateSpeech, decode, decodeAudioData } from '../services/geminiService';
 import { Message, ChatSession, Language } from '../types';
 import { VOICE_MAP, DEFAULT_SETTINGS } from '../constants';
 import { useTranslation } from '../translations';
@@ -48,12 +48,14 @@ export const ChatPage: React.FC = () => {
   const [editingSessionId, setEditingSessionId] = useState<string | null>(null);
   const [editTitle, setEditTitle] = useState('');
   
+  // خاص للبث (Streaming)
+  const [streamingMessage, setStreamingMessage] = useState<string>('');
+  const [streamingSources, setStreamingSources] = useState<{title: string, uri: string}[]>([]);
+
   const scrollRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
   const recognitionRef = useRef<any>(null);
-  
-  // قفل برمجي لمنع العمليات المتوازية
   const isProcessingRef = useRef(false);
 
   const currentSession = useMemo(() => 
@@ -77,7 +79,7 @@ export const ChatPage: React.FC = () => {
 
   useEffect(() => {
     scrollRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages, isTyping]);
+  }, [messages, isTyping, streamingMessage]);
 
   useEffect(() => {
     const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
@@ -115,10 +117,11 @@ export const ChatPage: React.FC = () => {
     const finalInput = (retryInput || input).trim();
     if (isProcessingRef.current || (!finalInput && !attachedImage)) return;
     
-    // تفعيل القفل فوراً وبقوة
     isProcessingRef.current = true;
     setError(null);
     setIsTyping(true);
+    setStreamingMessage('');
+    setStreamingSources([]);
 
     const userMsg: Message = { 
       id: "u_" + Date.now(), 
@@ -129,7 +132,6 @@ export const ChatPage: React.FC = () => {
 
     let activeId = currentSessionId;
 
-    // معالجة "الدردشة الجديدة" بشكل ذري
     if (!activeId) {
       activeId = "s_" + Date.now();
       const newSession: ChatSession = {
@@ -138,7 +140,6 @@ export const ChatPage: React.FC = () => {
         messages: [userMsg],
         lastTimestamp: Date.now()
       };
-      // تحديث الحالة بشكل وظيفي لضمان التزامن
       setSessions(prev => [newSession, ...prev]);
       setCurrentSessionId(activeId);
     } else {
@@ -149,7 +150,6 @@ export const ChatPage: React.FC = () => {
       } : s));
     }
 
-    // تنظيف الواجهة فوراً للسرعة
     const currentPrompt = finalInput;
     const currentImg = attachedImage;
     setInput('');
@@ -158,32 +158,42 @@ export const ChatPage: React.FC = () => {
 
     try {
       const currentLang = (localStorage.getItem('eyad-ai-lang') as Language) || Language.AR;
-      
-      const aiResponse = await generateText(currentPrompt || "حلل الصورة بدقة", { 
+      const stream = generateTextStream(currentPrompt || "Analyze this", {
         useSearch: true,
         image: currentImg || undefined,
-        systemInstruction: `You are Eyad AI, a multi-lingual master assistant.
-        Language Preference: ${currentLang}.
-        STRICT RULES:
-        1. SPEED: Reply in less than 2 seconds.
-        2. DIALECT: Always match the user's dialect (Egyptian, Gulf, etc.).
-        3. ACCURACY: Use Google Search for facts. If search is slow, use internal knowledge to maintain speed.
-        4. NO FILLERS: Don't say "Searching..." - just give the facts.`
+        systemInstruction: `You are Eyad AI. Speak in ${currentLang}.
+        1. SPEED: Start responding immediately.
+        2. ACCURACY: Use Google Search. Provide accurate, up-to-date answers.
+        3. DIALECT: Match the user's dialect exactly.
+        4. CONCISE: Give the answer directly without long introductions.`
       });
+
+      let finalFullText = "";
+      let finalSources: any[] = [];
+
+      for await (const chunk of stream) {
+        setIsTyping(false); // بمجرد بدء البث، نوقف حالة "التفكير"
+        setStreamingMessage(chunk.fullText);
+        setStreamingSources(chunk.sources);
+        finalFullText = chunk.fullText;
+        finalSources = chunk.sources;
+      }
       
       const modelMsg: Message = {
         id: "m_" + Date.now(),
         role: 'model',
-        text: aiResponse.text,
+        text: finalFullText,
         timestamp: Date.now(),
-        sources: aiResponse.sources
+        sources: finalSources
       };
 
       setSessions(prev => prev.map(s => s.id === activeId ? { 
         ...s, messages: [...s.messages, modelMsg], lastTimestamp: Date.now() 
       } : s));
+      setStreamingMessage('');
+      setStreamingSources([]);
+
     } catch (err: any) {
-      // إظهار رسالة خطأ ذكية فقط عند الفشل الكامل
       setError("إياد مشغول شوية، حاول كمان ثانية.");
       setInput(currentPrompt);
       setAttachedImage(currentImg);
@@ -284,7 +294,8 @@ export const ChatPage: React.FC = () => {
         </header>
 
         <div className="flex-grow overflow-y-auto p-4 md:p-8 space-y-6">
-          {messages.length === 0 && !error && <div className="h-full flex flex-col items-center justify-center text-center max-w-sm mx-auto animate-in fade-in duration-700"><div className="relative mb-6"><div className="absolute inset-0 bg-blue-500 blur-2xl opacity-20 animate-pulse rounded-full" /><Sparkles className="w-16 h-16 text-blue-500 relative" /></div><h1 className="text-3xl font-black mb-3 dark:text-white leading-tight">{t('chatWelcomeTitle')}</h1><p className="text-slate-500 dark:text-slate-400 font-medium leading-relaxed">{t('chatWelcomeDesc')}</p></div>}
+          {messages.length === 0 && !error && !streamingMessage && <div className="h-full flex flex-col items-center justify-center text-center max-w-sm mx-auto animate-in fade-in duration-700"><div className="relative mb-6"><div className="absolute inset-0 bg-blue-500 blur-2xl opacity-20 animate-pulse rounded-full" /><Sparkles className="w-16 h-16 text-blue-500 relative" /></div><h1 className="text-3xl font-black mb-3 dark:text-white leading-tight">{t('chatWelcomeTitle')}</h1><p className="text-slate-500 dark:text-slate-400 font-medium leading-relaxed">{t('chatWelcomeDesc')}</p></div>}
+          
           {messages.map((m) => (
             <div key={m.id} className={`flex flex-col ${m.role === 'user' ? 'items-end' : 'items-start'} animate-in fade-in slide-in-from-bottom-2`}>
               <div className={`relative group max-w-[90%] md:max-w-[85%] p-4 rounded-3xl shadow-sm ${m.role === 'user' ? 'bg-blue-600 text-white rounded-tr-none' : 'bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-slate-100 rounded-tl-none'}`}>
@@ -296,8 +307,30 @@ export const ChatPage: React.FC = () => {
               <span className="text-[9px] font-bold text-slate-400 mt-1 uppercase tracking-widest opacity-60">{new Date(m.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
             </div>
           ))}
-          {isTyping && <div className="flex justify-start"><div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 px-5 py-3 rounded-3xl rounded-tl-none flex gap-3 items-center shadow-sm"><div className="flex gap-1"><div className="w-2 h-2 bg-blue-500 rounded-full animate-bounce [animation-delay:-0.3s]" /><div className="w-2 h-2 bg-blue-500 rounded-full animate-bounce [animation-delay:-0.15s]" /><div className="w-2 h-2 bg-blue-500 rounded-full animate-bounce" /></div><span className="text-[10px] font-black text-slate-400 tracking-widest uppercase">{t('thinking')}</span></div></div>}
-          {error && <div className="p-4 bg-red-50 dark:bg-red-900/20 border-2 border-red-200 dark:border-red-900 rounded-2xl text-red-600 flex items-center gap-4 animate-in shake duration-500"><AlertCircle className="w-6 h-6 flex-shrink-0" /><div className="flex-grow"><p className="text-xs font-black uppercase tracking-widest opacity-60 mb-1">System Alert</p><p className="text-sm font-bold">{error}</p></div><button onClick={() => handleSend(messages[messages.length-1]?.text)} className="p-2 bg-red-100 dark:bg-red-800 rounded-xl hover:bg-red-200 dark:hover:bg-red-700 transition-colors"><RefreshCcw className="w-5 h-5" /></button></div>}
+
+          {/* عرض رسالة البث الحالية (Streaming) */}
+          {streamingMessage && (
+            <div className="flex flex-col items-start animate-in fade-in slide-in-from-bottom-2">
+              <div className="relative max-w-[90%] md:max-w-[85%] p-4 rounded-3xl shadow-sm bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-slate-100 rounded-tl-none">
+                <p className="whitespace-pre-wrap leading-relaxed text-sm md:text-base font-medium">{streamingMessage}</p>
+                {streamingSources.length > 0 && (
+                  <div className="mt-4 pt-3 border-t border-slate-100 dark:border-slate-800 space-y-2 animate-in fade-in">
+                    <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 flex items-center gap-1"><Globe className="w-3 h-3" /> Searching...</p>
+                    <div className="flex flex-wrap gap-2">
+                      {streamingSources.map((src, idx) => (
+                        <a key={idx} href={src.uri} target="_blank" rel="noreferrer" className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-50 dark:bg-slate-800 rounded-lg text-xs font-bold text-blue-600 dark:text-blue-400 border border-transparent hover:border-blue-100"><ExternalLink className="w-3 h-3" /><span className="truncate max-w-[150px]">{src.title}</span></a>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+              <span className="text-[9px] font-bold text-slate-400 mt-1 uppercase tracking-widest opacity-60 flex items-center gap-1"><Loader2 className="w-3 h-3 animate-spin" /> Live typing...</span>
+            </div>
+          )}
+
+          {isTyping && <div className="flex justify-start"><div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 px-5 py-3 rounded-3xl rounded-tl-none flex gap-3 items-center shadow-sm"><div className="flex gap-1"><div className="w-2 h-2 bg-blue-500 rounded-full animate-bounce [animation-delay:-0.3s]" /><div className="w-2 h-2 bg-blue-500 rounded-full animate-bounce [animation-delay:-0.15s]" /><div className="w-2 h-2 bg-blue-500 rounded-full animate-bounce" /></div><span className="text-[10px] font-black text-slate-400 tracking-widest uppercase">Searching & Thinking...</span></div></div>}
+          
+          {error && <div className="p-4 bg-red-50 dark:bg-red-900/20 border-2 border-red-200 dark:border-red-900 rounded-2xl text-red-600 flex items-center gap-4 animate-in shake duration-500"><AlertCircle className="w-6 h-6 flex-shrink-0" /><div className="flex-grow"><p className="xs font-black uppercase tracking-widest opacity-60 mb-1">System Alert</p><p className="text-sm font-bold">{error}</p></div><button onClick={() => handleSend(messages[messages.length-1]?.text)} className="p-2 bg-red-100 dark:bg-red-800 rounded-xl hover:bg-red-200 dark:hover:bg-red-700 transition-colors"><RefreshCcw className="w-5 h-5" /></button></div>}
           <div ref={scrollRef} />
         </div>
 
@@ -317,19 +350,19 @@ export const ChatPage: React.FC = () => {
                       handleSend(); 
                     } 
                   }} 
-                  disabled={isTyping}
+                  disabled={isProcessingRef.current}
                   placeholder="اسأل إياد أو استعمل المايك..." 
                   className="w-full bg-slate-100 dark:bg-slate-900 border-2 border-transparent focus:border-blue-500/20 focus:bg-white dark:focus:bg-slate-800 rounded-2xl px-5 py-4 outline-none resize-none min-h-[56px] max-h-40 text-slate-900 dark:text-white font-medium transition-all shadow-inner disabled:opacity-50" 
                   rows={1} 
                 />
               </div>
-              <button onClick={toggleListening} disabled={isTyping} className={`p-4 rounded-2xl transition-all shadow-lg flex-shrink-0 disabled:opacity-50 ${isListening ? 'bg-red-500 text-white animate-pulse ring-4 ring-red-500/20' : 'bg-slate-100 dark:bg-slate-900 text-slate-500 dark:text-slate-400 hover:text-blue-500'}`}>{isListening ? <MicOff className="w-6 h-6" /> : <Mic className="w-6 h-6" />}</button>
+              <button onClick={toggleListening} disabled={isProcessingRef.current} className={`p-4 rounded-2xl transition-all shadow-lg flex-shrink-0 disabled:opacity-50 ${isListening ? 'bg-red-500 text-white animate-pulse ring-4 ring-red-500/20' : 'bg-slate-100 dark:bg-slate-900 text-slate-500 dark:text-slate-400 hover:text-blue-500'}`}>{isListening ? <MicOff className="w-6 h-6" /> : <Mic className="w-6 h-6" />}</button>
               <button 
                 onClick={() => handleSend()} 
-                disabled={(!input.trim() && !attachedImage) || isTyping} 
+                disabled={(!input.trim() && !attachedImage) || isProcessingRef.current} 
                 className="p-4 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white rounded-2xl shadow-xl flex items-center justify-center transition-all active:scale-90 flex-shrink-0"
               >
-                {isTyping ? <Loader2 className="w-6 h-6 animate-spin" /> : <Send className="w-6 h-6" />}
+                {isProcessingRef.current ? <Loader2 className="w-6 h-6 animate-spin" /> : <Send className="w-6 h-6" />}
               </button>
             </div>
           </div>
