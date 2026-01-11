@@ -8,6 +8,7 @@ import { WritingPage } from './pages/WritingPage';
 import { VoicePage } from './pages/VoicePage';
 import { Settings } from './pages/Settings';
 import { HomeworkPage } from './pages/HomeworkPage';
+import { SearchInfoPage } from './pages/SearchInfoPage';
 import { Language, Theme } from './types';
 
 const App: React.FC = () => {
@@ -33,6 +34,7 @@ const App: React.FC = () => {
         <Routes>
           <Route path="/" element={<Home />} />
           <Route path="/chat" element={<ChatPage />} />
+          <Route path="/search" element={<SearchInfoPage />} />
           <Route path="/homework" element={<HomeworkPage />} />
           <Route path="/writing" element={<WritingPage />} />
           <Route path="/voice" element={<VoicePage />} />

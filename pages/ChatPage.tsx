@@ -9,17 +9,18 @@ import {
   Image as ImageIcon,
   History,
   MessageSquare,
-  AlertCircle,
-  RefreshCcw,
   Edit2,
-  Check,
   X as CloseIcon,
-  Trash
+  Trash,
+  PanelLeftClose,
+  PanelLeftOpen
 } from 'lucide-react';
 import { generateTextStream } from '../services/geminiService';
 import { Message, ChatSession } from '../types';
+import { useTranslation } from '../translations';
 
 export const ChatPage: React.FC = () => {
+  const t = useTranslation();
   const [sessions, setSessions] = useState<ChatSession[]>(() => {
     const saved = localStorage.getItem('eyad-ai-sessions-v5');
     return saved ? JSON.parse(saved) : [];
@@ -29,6 +30,7 @@ export const ChatPage: React.FC = () => {
     return localStorage.getItem('eyad-ai-active-session-v5');
   });
 
+  const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [input, setInput] = useState('');
   const [isTyping, setIsTyping] = useState(false);
   const [attachedImage, setAttachedImage] = useState<{data: string, mimeType: string} | null>(null);
@@ -70,7 +72,7 @@ export const ChatPage: React.FC = () => {
     const userMsg: Message = {
       id: "u_" + Date.now() + Math.random(),
       role: 'user',
-      text: pText || "تحليل صورة",
+      text: pText || (t('attachPhoto')),
       timestamp: Date.now(),
       image: attachedImage || undefined
     };
@@ -80,7 +82,7 @@ export const ChatPage: React.FC = () => {
       sId = "s_" + Date.now();
       const newSession: ChatSession = {
         id: sId,
-        title: pText.substring(0, 20) || "محادثة جديدة",
+        title: pText.substring(0, 20) || t('newChat'),
         messages: [userMsg],
         lastTimestamp: Date.now()
       };
@@ -100,9 +102,9 @@ export const ChatPage: React.FC = () => {
 
     try {
       const stream = generateTextStream(pText, {
-        useSearch: true,
+        useSearch: false, 
         image: backupImg || undefined,
-        systemInstruction: "You are Eyad AI, a helpful educational assistant. Provide direct and accurate info."
+        systemInstruction: "You are Eyad AI, a brilliant and helpful educational partner. Answer concisely and creatively."
       });
 
       let fullText = "";
@@ -126,7 +128,7 @@ export const ChatPage: React.FC = () => {
       } : s));
       setStreamingText('');
     } catch (err: any) {
-      setError("حصل مشكلة في الاتصال.");
+      setError("Connection error.");
     } finally {
       setIsTyping(false);
       isSending.current = false;
@@ -154,41 +156,45 @@ export const ChatPage: React.FC = () => {
   };
 
   return (
-    <div className="flex h-[calc(100vh-80px)] bg-[#020617] text-white overflow-hidden relative">
+    <div className="flex h-[calc(100vh-80px)] bg-white dark:bg-[#020617] text-slate-900 dark:text-white overflow-hidden relative transition-colors duration-300">
       
-      {/* Persistent Sidebar */}
-      <div className="w-64 bg-[#020617] border-e border-white/5 flex flex-col shrink-0 hidden md:flex">
-        <div className="p-4 flex items-center justify-between border-b border-white/5">
-          <span className="font-bold text-xs flex items-center gap-2 text-slate-500 uppercase tracking-widest">
-            <History size={14}/> السجل
+      {/* Sidebar with Toggle logic */}
+      <div 
+        className={`bg-slate-50 dark:bg-[#020617] border-e border-slate-200 dark:border-white/5 flex flex-col shrink-0 transition-all duration-300 ease-in-out hidden md:flex shadow-sm ${
+          isSidebarOpen ? 'w-72 opacity-100' : 'w-0 opacity-0 overflow-hidden border-none'
+        }`}
+      >
+        <div className="p-6 flex items-center justify-between border-b border-slate-200 dark:border-white/5 whitespace-nowrap">
+          <span className="font-black text-xs flex items-center gap-2 text-slate-400 uppercase tracking-widest">
+            <History size={14}/> {t('chatHistory')}
           </span>
         </div>
         
-        <div className="p-4">
+        <div className="p-4 whitespace-nowrap">
           <button 
             onClick={() => setActiveId(null)}
-            className="w-full py-2.5 bg-white/5 hover:bg-blue-600 border border-white/10 hover:border-blue-500 rounded-xl text-xs font-bold flex items-center justify-center gap-2 transition-all active:scale-95 shadow-sm"
+            className="w-full py-3.5 bg-blue-600 text-white border border-blue-500 rounded-2xl text-sm font-black flex items-center justify-center gap-2 transition-all active:scale-95 shadow-xl shadow-blue-600/20"
           >
-            <Plus size={16}/> محادثة جديدة
+            <Plus size={18}/> {t('newChat')}
           </button>
         </div>
 
-        <div className="flex-grow overflow-y-auto custom-scrollbar p-2 space-y-1">
+        <div className="flex-grow overflow-y-auto custom-scrollbar p-3 space-y-1 whitespace-nowrap">
           {sessions.map(s => (
             <div 
               key={s.id} 
               onClick={() => setActiveId(s.id)}
-              className={`group px-3 py-2.5 rounded-xl cursor-pointer flex items-center gap-3 transition-all border ${
+              className={`group px-4 py-3.5 rounded-2xl cursor-pointer flex items-center gap-3 transition-all border ${
                 activeId === s.id 
-                  ? 'bg-blue-600/10 border-blue-500 text-blue-400' 
-                  : 'bg-transparent border-transparent text-slate-500 hover:bg-white/5 hover:text-white'
+                  ? 'bg-blue-600/10 border-blue-600/20 text-blue-600' 
+                  : 'bg-transparent border-transparent text-slate-500 hover:bg-slate-100 dark:hover:bg-white/5 hover:text-slate-900 dark:hover:text-white'
               }`}
             >
-              <MessageSquare size={14} className="shrink-0"/>
+              <MessageSquare size={16} className="shrink-0"/>
               {editingId === s.id ? (
                 <input
                   autoFocus
-                  className="bg-slate-800 text-white text-xs px-2 py-1 rounded w-full outline-none border border-blue-500"
+                  className="bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-xs px-2 py-1 rounded-lg w-full outline-none border border-blue-500"
                   value={editingTitle}
                   onChange={e => setEditingTitle(e.target.value)}
                   onKeyDown={e => { if(e.key === 'Enter') saveTitle(s.id); if(e.key === 'Escape') setEditingId(null); }}
@@ -196,20 +202,10 @@ export const ChatPage: React.FC = () => {
                 />
               ) : (
                 <>
-                  <span className="text-xs font-bold truncate flex-grow leading-tight">{s.title}</span>
+                  <span className="text-sm font-bold truncate flex-grow tracking-tight leading-tight">{s.title}</span>
                   <div className="flex items-center opacity-0 group-hover:opacity-100 transition-opacity gap-1">
-                    <button 
-                      onClick={(e) => { e.stopPropagation(); startEditing(s.id, s.title); }}
-                      className="p-1 hover:text-white"
-                    >
-                      <Edit2 size={12}/>
-                    </button>
-                    <button 
-                      onClick={(e) => { e.stopPropagation(); setSessions(prev => prev.filter(x => x.id !== s.id)); if(activeId === s.id) setActiveId(null); }}
-                      className="p-1 hover:text-red-500"
-                    >
-                      <Trash2 size={12}/>
-                    </button>
+                    <button onClick={(e) => { e.stopPropagation(); startEditing(s.id, s.title); }} className="p-1.5 hover:text-blue-600"><Edit2 size={14}/></button>
+                    <button onClick={(e) => { e.stopPropagation(); setSessions(prev => prev.filter(x => x.id !== s.id)); if(activeId === s.id) setActiveId(null); }} className="p-1.5 hover:text-red-500"><Trash2 size={14}/></button>
                   </div>
                 </>
               )}
@@ -218,47 +214,55 @@ export const ChatPage: React.FC = () => {
         </div>
       </div>
 
-      {/* Main Container */}
-      <div className="flex-grow flex flex-col min-w-0 bg-[#020617] relative">
-        <header className="h-16 px-6 flex items-center justify-between border-b border-white/5 bg-[#020617]/50 backdrop-blur-md shrink-0">
+      <div className="flex-grow flex flex-col min-w-0 bg-white dark:bg-[#020617] relative transition-all duration-300">
+        <header className="h-16 px-6 flex items-center justify-between border-b border-slate-200 dark:border-white/5 bg-white/50 dark:bg-[#020617]/50 backdrop-blur-md shrink-0">
           <div className="flex items-center gap-4">
-            <h2 className="text-sm font-black tracking-tight truncate max-w-[300px]">
-              {currentSession ? currentSession.title : "New Chat"}
+            <button 
+              onClick={() => setIsSidebarOpen(!isSidebarOpen)}
+              className="p-2 text-slate-400 hover:text-blue-600 hover:bg-slate-100 dark:hover:bg-white/5 rounded-xl transition-all hidden md:flex items-center justify-center"
+              title={isSidebarOpen ? "Hide Sidebar" : "Show Sidebar"}
+            >
+              {isSidebarOpen ? <PanelLeftClose size={20} /> : <PanelLeftOpen size={20} />}
+            </button>
+            <h2 className="text-sm font-black tracking-tight truncate max-w-[250px] md:max-w-[400px]">
+              {currentSession ? currentSession.title : t('newChat')}
             </h2>
           </div>
         </header>
 
-        {/* Chat Messages */}
-        <div className="flex-grow overflow-y-auto px-4 py-6 custom-scrollbar">
-          <div className="max-w-3xl mx-auto space-y-6">
+        <div className="flex-grow overflow-y-auto px-4 py-8 custom-scrollbar">
+          <div className="max-w-3xl mx-auto space-y-8">
             {messages.length === 0 && !streamingText && (
-              <div className="py-20 text-center space-y-6 animate-in fade-in">
-                <div className="w-16 h-16 bg-blue-600/10 rounded-2xl flex items-center justify-center mx-auto border border-blue-600/20">
-                  <Sparkles size={32} className="text-blue-600 animate-pulse"/>
+              <div className="py-24 text-center space-y-8 animate-in fade-in duration-1000">
+                <div className="w-20 h-20 bg-blue-600/10 rounded-3xl flex items-center justify-center mx-auto border border-blue-600/20">
+                  <Sparkles size={40} className="text-blue-600 animate-pulse"/>
                 </div>
-                <h3 className="text-xl font-black">أهلاً بك! أنا إياد.</h3>
-                <p className="text-slate-500 text-sm">اسأل أي حاجة، أنا هنا عشان أساعدك.</p>
+                <div className="space-y-4">
+                  <h3 className="text-2xl md:text-3xl font-black tracking-tighter">{t('welcomeTitle')}</h3>
+                  <p className="text-slate-500 dark:text-slate-400 font-medium max-w-sm mx-auto">
+                    {t('welcomeDesc')}
+                  </p>
+                </div>
               </div>
             )}
 
             {messages.map((m) => (
               <div key={m.id} className={`flex ${m.role === 'user' ? 'justify-end' : 'justify-start'} group relative`}>
-                <div className={`max-w-[85%] relative ${m.role === 'user' ? 'bg-blue-600 text-white' : 'bg-white/5 border border-white/10'} p-4 rounded-2xl shadow-sm`}>
+                <div className={`max-w-[85%] relative ${m.role === 'user' ? 'bg-blue-600 text-white shadow-xl shadow-blue-600/20' : 'bg-slate-100 dark:bg-white/5 border border-slate-200 dark:border-white/10 text-slate-900 dark:text-white'} p-5 rounded-[2rem] shadow-sm`}>
                   
-                  {/* Individual Delete Button */}
                   <button 
                     onClick={() => deleteMessage(m.id)}
-                    className="absolute -top-2 -right-2 p-1.5 bg-red-600 text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity shadow-lg z-10"
-                    title="حذف الرسالة"
+                    className="absolute -top-3 -right-3 p-2 bg-red-600 text-white rounded-full opacity-0 group-hover:opacity-100 transition-all shadow-xl z-10 hover:scale-110 active:scale-90"
+                    title={t('delete')}
                   >
                     <Trash size={12}/>
                   </button>
 
-                  {m.image && <img src={`data:${m.image.mimeType};base64,${m.image.data}`} className="max-w-full rounded-lg mb-3 border border-white/10" alt="sent"/>}
-                  <p className="whitespace-pre-wrap font-bold text-sm leading-relaxed">{m.text}</p>
+                  {m.image && <img src={`data:${m.image.mimeType};base64,${m.image.data}`} className="max-w-full rounded-2xl mb-4 border border-white/10" alt="sent"/>}
+                  <p className="whitespace-pre-wrap font-bold text-sm md:text-base leading-relaxed tracking-tight">{m.text}</p>
                   
-                  <div className={`text-[9px] mt-2 opacity-40 uppercase tracking-widest font-black ${m.role === 'user' ? 'text-right' : 'text-left'}`}>
-                    {m.role === 'user' ? 'أنت' : 'إياد AI'}
+                  <div className={`text-[9px] mt-3 opacity-40 uppercase tracking-[0.2em] font-black ${m.role === 'user' ? 'text-right' : 'text-left'}`}>
+                    {m.role === 'user' ? t('user') : t('ai')}
                   </div>
                 </div>
               </div>
@@ -266,40 +270,33 @@ export const ChatPage: React.FC = () => {
 
             {(streamingText || isTyping) && (
               <div className="flex justify-start">
-                <div className="max-w-[85%] bg-white/5 border border-white/10 p-4 rounded-2xl">
+                <div className="max-w-[85%] bg-slate-100 dark:bg-white/5 border border-slate-200 dark:border-white/10 p-5 rounded-[2rem]">
                   {isTyping && !streamingText ? (
-                    <div className="flex gap-1">
-                      <div className="w-1.5 h-1.5 bg-blue-500 rounded-full animate-bounce [animation-delay:-0.3s]"></div>
-                      <div className="w-1.5 h-1.5 bg-blue-500 rounded-full animate-bounce [animation-delay:-0.15s]"></div>
-                      <div className="w-1.5 h-1.5 bg-blue-500 rounded-full animate-bounce"></div>
+                    <div className="flex gap-1.5 p-2">
+                      <div className="w-2 h-2 bg-blue-500 rounded-full animate-bounce [animation-delay:-0.3s]"></div>
+                      <div className="w-2 h-2 bg-blue-500 rounded-full animate-bounce [animation-delay:-0.15s]"></div>
+                      <div className="w-2 h-2 bg-blue-500 rounded-full animate-bounce"></div>
                     </div>
                   ) : (
-                    <p className="whitespace-pre-wrap font-bold text-sm leading-relaxed">{streamingText}</p>
+                    <p className="whitespace-pre-wrap font-bold text-sm md:text-base leading-relaxed tracking-tight">{streamingText}</p>
                   )}
                 </div>
               </div>
             )}
-
-            {error && (
-              <div className="p-4 bg-red-500/10 border border-red-500/20 text-red-500 rounded-xl text-center text-xs font-bold animate-pulse">
-                {error}
-              </div>
-            )}
-            <div ref={scrollRef} className="h-4"/>
+            <div ref={scrollRef} className="h-6"/>
           </div>
         </div>
 
-        {/* Input Bar */}
-        <div className="p-4 md:p-6 shrink-0 bg-[#020617]">
+        <div className="p-4 md:p-8 shrink-0 bg-white dark:bg-[#020617] border-t border-slate-100 dark:border-white/5">
           <div className="max-w-3xl mx-auto">
             {attachedImage && (
-              <div className="mb-2 p-2 bg-blue-600/10 border border-blue-500/20 rounded-xl w-fit flex items-center gap-2">
-                <img src={`data:${attachedImage.mimeType};base64,${attachedImage.data}`} className="w-10 h-10 rounded object-cover" alt="prev"/>
-                <button onClick={() => setAttachedImage(null)}><CloseIcon size={14} className="text-red-500"/></button>
+              <div className="mb-4 p-2 bg-blue-600/5 border border-blue-600/20 rounded-2xl w-fit flex items-center gap-3 animate-in zoom-in">
+                <img src={`data:${attachedImage.mimeType};base64,${attachedImage.data}`} className="w-12 h-12 rounded-xl object-cover shadow-lg" alt="prev"/>
+                <button onClick={() => setAttachedImage(null)} className="p-1.5 hover:bg-red-500/20 rounded-full transition-colors"><CloseIcon size={16} className="text-red-500"/></button>
               </div>
             )}
             
-            <div className="relative flex items-end gap-2 bg-white/5 border border-white/10 rounded-2xl p-2 focus-within:border-blue-500/50 transition-all shadow-lg backdrop-blur-sm">
+            <div className="relative flex items-end gap-3 bg-slate-50 dark:bg-white/5 border border-slate-200 dark:border-white/10 rounded-[2.5rem] p-2.5 focus-within:border-blue-600 focus-within:ring-4 focus-within:ring-blue-600/5 transition-all shadow-xl">
               <input 
                 type="file" 
                 ref={fileInputRef} 
@@ -316,30 +313,31 @@ export const ChatPage: React.FC = () => {
               />
               <button 
                 onClick={() => fileInputRef.current?.click()} 
-                className="p-2.5 text-slate-500 hover:text-blue-500 transition-all rounded-xl"
+                className="p-3 text-slate-400 hover:text-blue-600 transition-all rounded-full hover:bg-white dark:hover:bg-white/10 shadow-sm"
+                title={t('attachPhoto')}
               >
-                <ImageIcon size={20}/>
+                <ImageIcon size={22}/>
               </button>
               
               <textarea 
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
                 onKeyDown={(e) => { if(e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSend(); } }}
-                placeholder="اسأل إياد..."
+                placeholder={t('askEyad')}
                 rows={1}
-                className="flex-grow bg-transparent border-none outline-none py-2 px-1 text-sm font-bold resize-none max-h-32 placeholder:text-slate-600"
+                className="flex-grow bg-transparent border-none outline-none py-3 px-2 text-base md:text-lg font-bold resize-none max-h-40 placeholder:text-slate-400 dark:text-white"
               />
               
               <button 
                 onClick={() => handleSend()} 
                 disabled={isSending.current || (!input.trim() && !attachedImage)} 
-                className={`p-2.5 rounded-xl transition-all ${
+                className={`p-3.5 rounded-full transition-all active:scale-90 flex items-center justify-center ${
                   isSending.current || (!input.trim() && !attachedImage) 
-                    ? 'text-slate-700 bg-transparent' 
-                    : 'bg-blue-600 text-white shadow-md'
+                    ? 'text-slate-300 dark:text-slate-700 bg-transparent' 
+                    : 'bg-blue-600 text-white shadow-xl shadow-blue-600/30'
                 }`}
               >
-                {isSending.current ? <Loader2 size={20} className="animate-spin"/> : <Send size={20}/>}
+                {isSending.current ? <Loader2 size={24} className="animate-spin"/> : <Send size={24}/>}
               </button>
             </div>
           </div>

@@ -50,7 +50,6 @@ export const WritingPage = () => {
     setVocabResult(null);
 
     const currentLang = localStorage.getItem('eyad-ai-lang') || Language.EN;
-    // Fix: Property 'EG' does not exist on type 'typeof Language'. Use Language.DIALECT instead.
     const isRTL = currentLang === Language.AR || currentLang === Language.DIALECT;
     
     try {
@@ -141,7 +140,7 @@ export const WritingPage = () => {
   };
 
   return (
-    <div className="max-w-6xl mx-auto p-4 md:p-10 min-h-screen space-y-10">
+    <div className="max-w-6xl mx-auto p-4 md:p-10 min-h-screen space-y-12">
       <div className="text-center space-y-4">
         <div className="inline-flex items-center gap-2 px-4 py-2 bg-indigo-50 dark:bg-indigo-900/30 rounded-full text-indigo-600 dark:text-indigo-400 text-xs font-black uppercase tracking-widest border border-indigo-100 dark:border-indigo-800">
           <PenTool className="w-3.5 h-3.5" /> {t('writingTitle')}
@@ -154,7 +153,7 @@ export const WritingPage = () => {
         </p>
       </div>
 
-      <div className="flex flex-wrap justify-center gap-4">
+      <div className="flex flex-wrap justify-center gap-4 mb-8">
         {[
           { id: 'grammar', label: t('tabGrammar'), icon: Check },
           { id: 'vocabulary', label: t('tabVocab'), icon: Type },
@@ -185,37 +184,37 @@ export const WritingPage = () => {
         ))}
       </div>
 
-      <div className="bg-white dark:bg-slate-900 rounded-[2.5rem] p-6 md:p-10 border border-slate-200 dark:border-slate-800 shadow-xl transition-all">
-        <div className="space-y-6">
+      <div className="bg-white dark:bg-slate-900 rounded-[2.5rem] p-8 md:p-12 border border-slate-200 dark:border-slate-800 shadow-xl transition-all">
+        <div className="space-y-12">
           {(mode === 'grammar' || mode === 'vocabulary') && (
             <div className="space-y-4">
-              <label className="text-xs font-black uppercase tracking-widest text-slate-400">
+              <label className="text-xs font-black uppercase tracking-widest text-slate-400 px-2">
                 {mode === 'grammar' ? t('grammarLabel') : t('vocabLabel')}
               </label>
               <textarea 
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
                 placeholder={mode === 'grammar' ? t('grammarPlaceholder') : t('vocabPlaceholder')}
-                className="w-full p-6 bg-slate-50 dark:bg-slate-800 rounded-3xl border-none outline-none focus:ring-4 focus:ring-indigo-500/10 min-h-[200px] text-lg font-medium dark:text-white resize-none"
+                className="w-full p-8 bg-slate-50 dark:bg-slate-800 rounded-[2rem] border-none outline-none focus:ring-4 focus:ring-indigo-500/10 min-h-[220px] text-lg font-medium dark:text-white resize-none shadow-inner"
               />
             </div>
           )}
 
           {mode === 'generator' && (
-            <div className="space-y-6">
-              <div className="space-y-2">
-                <label className="text-xs font-black uppercase tracking-widest text-slate-400">{t('genTopicLabel')}</label>
+            <div className="space-y-8">
+              <div className="space-y-3">
+                <label className="text-xs font-black uppercase tracking-widest text-slate-400 px-2">{t('genTopicLabel')}</label>
                 <input 
                   type="text"
                   value={genTopic}
                   onChange={(e) => setGenTopic(e.target.value)}
                   placeholder={t('genTopicPlaceholder')}
-                  className="w-full p-5 bg-slate-50 dark:bg-slate-800 rounded-2xl border-none outline-none focus:ring-4 focus:ring-indigo-500/10 text-xl font-bold dark:text-white"
+                  className="w-full p-6 bg-slate-50 dark:bg-slate-800 rounded-2xl border-none outline-none focus:ring-4 focus:ring-indigo-500/10 text-xl font-bold dark:text-white shadow-inner"
                 />
               </div>
-              <div className="space-y-2">
-                <label className="text-xs font-black uppercase tracking-widest text-slate-400">{t('genLengthLabel')}</label>
-                <div className="grid grid-cols-3 gap-3">
+              <div className="space-y-3">
+                <label className="text-xs font-black uppercase tracking-widest text-slate-400 px-2">{t('genLengthLabel')}</label>
+                <div className="grid grid-cols-3 gap-4">
                   {[
                     { id: 'short', label: t('genShort') },
                     { id: 'medium', label: t('genMedium') },
@@ -224,7 +223,7 @@ export const WritingPage = () => {
                     <button 
                       key={l.id} 
                       onClick={() => setGenLength(l.id)}
-                      className={`p-3 rounded-xl border-2 font-bold text-sm transition-all ${genLength === l.id ? 'border-indigo-500 bg-indigo-50 dark:bg-indigo-900/20 text-indigo-600' : 'border-slate-100 dark:border-slate-800 text-slate-400'}`}
+                      className={`p-4 rounded-xl border-2 font-black text-sm transition-all ${genLength === l.id ? 'border-indigo-500 bg-indigo-50 dark:bg-indigo-900/20 text-indigo-600' : 'border-slate-100 dark:border-slate-800 text-slate-400'}`}
                     >
                       {l.label}
                     </button>
@@ -236,61 +235,63 @@ export const WritingPage = () => {
 
           {mode === 'irab' && (
             <div className="space-y-4">
-              <label className="text-xs font-black uppercase tracking-widest text-slate-400">{t('irabLabel')}</label>
+              <label className="text-xs font-black uppercase tracking-widest text-slate-400 px-2">{t('irabLabel')}</label>
               <input 
                 type="text"
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
                 onKeyDown={(e) => e.key === 'Enter' && handleAction()}
                 placeholder={t('irabPlaceholder')}
-                className="w-full p-6 bg-slate-50 dark:bg-slate-800 rounded-3xl border-none outline-none focus:ring-4 focus:ring-indigo-500/10 text-2xl font-bold text-center dark:text-white font-serif"
+                className="w-full p-8 bg-slate-50 dark:bg-slate-800 rounded-[2rem] border-none outline-none focus:ring-4 focus:ring-indigo-500/10 text-2xl font-bold text-center dark:text-white font-serif shadow-inner"
                 dir="rtl"
               />
             </div>
           )}
 
-          <button
-            onClick={handleAction}
-            disabled={isLoading || (mode !== 'generator' && !input) || (mode === 'generator' && !genTopic)}
-            className="w-full py-5 bg-indigo-600 text-white rounded-2xl font-black text-lg hover:bg-indigo-700 shadow-xl shadow-indigo-600/30 flex items-center justify-center gap-3 disabled:opacity-50 disabled:cursor-not-allowed transition-all active:scale-95"
-          >
-            {isLoading ? <Loader2 className="w-6 h-6 animate-spin" /> : <Sparkles className="w-6 h-6" />}
-            {isLoading ? t('processing') : mode === 'grammar' ? t('fixButton') : mode === 'vocabulary' ? t('vocabButton') : mode === 'generator' ? t('genButton') : t('irabButton')}
-          </button>
+          <div className="pt-8 mb-8">
+            <button
+              onClick={handleAction}
+              disabled={isLoading || (mode !== 'generator' && !input) || (mode === 'generator' && !genTopic)}
+              className="w-full py-6 bg-indigo-600 text-white rounded-[2rem] font-black text-xl hover:bg-indigo-700 shadow-2xl shadow-indigo-600/30 flex items-center justify-center gap-4 disabled:opacity-50 disabled:cursor-not-allowed transition-all active:scale-95"
+            >
+              {isLoading ? <Loader2 className="w-7 h-7 animate-spin" /> : <Sparkles className="w-7 h-7 fill-white" />}
+              {isLoading ? t('processing') : mode === 'grammar' ? t('tabGrammar') : mode === 'vocabulary' ? t('tabVocab') : mode === 'generator' ? t('tabGenerator') : t('tabIrab')}
+            </button>
+          </div>
         </div>
 
         {error && (
-          <div className="mt-8 p-6 bg-red-50 dark:bg-red-950/20 border border-red-200 dark:border-red-900 rounded-2xl flex items-center gap-4 text-red-600 dark:text-red-400 animate-in fade-in slide-in-from-top-4">
-            <AlertCircle className="w-6 h-6 flex-shrink-0" />
-            <p className="font-bold">{error}</p>
+          <div className="mt-12 p-8 bg-red-50 dark:bg-red-950/20 border border-red-200 dark:border-red-900 rounded-[2rem] flex items-center gap-4 text-red-600 dark:text-red-400 animate-in fade-in slide-in-from-top-4">
+            <AlertCircle className="w-7 h-7 flex-shrink-0" />
+            <p className="font-black text-lg">{error}</p>
           </div>
         )}
 
         {(grammarResult || genResult || irabResult || vocabResult) && (
-          <div className="mt-10 pt-10 border-t border-slate-100 dark:border-slate-800 animate-in fade-in slide-in-from-bottom-8">
+          <div className="mt-20 pt-16 border-t border-slate-100 dark:border-slate-800 animate-in fade-in slide-in-from-bottom-8 space-y-16">
             {grammarResult && (
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-12">
                 <div className="space-y-4">
-                   <h3 className="font-black text-slate-400 uppercase tracking-widest text-xs">{t('resultOriginal')}</h3>
-                   <div className="p-6 bg-red-50 dark:bg-red-900/10 rounded-3xl border border-red-100 dark:border-red-900/30 text-slate-600 dark:text-slate-300 leading-relaxed line-through decoration-red-400/50">
+                   <h3 className="font-black text-slate-400 uppercase tracking-widest text-xs px-2">{t('resultOriginal')}</h3>
+                   <div className="p-8 bg-red-50 dark:bg-red-900/10 rounded-[2rem] border border-red-100 dark:border-red-900/30 text-slate-600 dark:text-slate-300 leading-relaxed line-through decoration-red-400/50 text-lg">
                      {input}
                    </div>
                 </div>
                 <div className="space-y-4">
-                   <div className="flex justify-between items-center">
+                   <div className="flex justify-between items-center px-2">
                      <h3 className="font-black text-green-600 uppercase tracking-widest text-xs">{t('resultCorrected')}</h3>
-                     <button onClick={() => copyToClipboard(grammarResult.corrected)} className="text-indigo-600 text-xs font-bold flex items-center gap-1 hover:underline"> {t('copyText')}</button>
+                     <button onClick={() => copyToClipboard(grammarResult.corrected)} className="text-indigo-600 text-xs font-black flex items-center gap-2 hover:underline bg-indigo-50 dark:bg-indigo-900/20 px-3 py-1.5 rounded-lg transition-all"> <Copy size={14}/> {t('copyText')}</button>
                    </div>
-                   <div className="p-6 bg-green-50 dark:bg-green-900/10 rounded-3xl border border-green-100 dark:border-green-900/30 text-slate-800 dark:text-white font-medium leading-relaxed">
+                   <div className="p-8 bg-green-50 dark:bg-green-900/10 rounded-[2rem] border border-green-100 dark:border-green-900/30 text-slate-800 dark:text-white font-bold leading-relaxed text-lg">
                      {grammarResult.corrected}
                    </div>
                    {grammarResult.changes.length > 0 && (
-                     <div className="pt-4">
-                        <p className="text-xs font-bold text-slate-400 mb-2">{t('changesLog')}</p>
-                        <ul className="space-y-1">
+                     <div className="pt-6 px-2">
+                        <p className="text-xs font-black text-slate-400 mb-4 uppercase tracking-widest">{t('changesLog')}</p>
+                        <ul className="space-y-3">
                           {grammarResult.changes.map((c, i) => (
-                            <li key={i} className="text-sm text-slate-600 dark:text-slate-400 flex items-start gap-2">
-                              <span className="mt-1.5 w-1.5 h-1.5 rounded-full bg-indigo-400 flex-shrink-0"></span> {c}
+                            <li key={i} className="text-base text-slate-600 dark:text-slate-400 flex items-start gap-3 bg-slate-50 dark:bg-white/[0.02] p-3 rounded-xl border border-slate-100 dark:border-white/[0.05]">
+                              <span className="mt-2 w-2 h-2 rounded-full bg-indigo-500 flex-shrink-0"></span> {c}
                             </li>
                           ))}
                         </ul>
@@ -301,39 +302,39 @@ export const WritingPage = () => {
             )}
 
             {vocabResult && (
-              <div className="space-y-8">
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+              <div className="space-y-12">
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-12">
                   <div className="space-y-4">
-                    <h3 className="font-black text-slate-400 uppercase tracking-widest text-xs">{t('resultOriginal')}</h3>
-                    <div className="p-6 bg-slate-50 dark:bg-slate-800/50 rounded-3xl border border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-400 font-medium">
+                    <h3 className="font-black text-slate-400 uppercase tracking-widest text-xs px-2">{t('resultOriginal')}</h3>
+                    <div className="p-8 bg-slate-50 dark:bg-slate-800/50 rounded-[2rem] border border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-400 font-bold text-lg">
                       {input}
                     </div>
                   </div>
                   <div className="space-y-4">
-                    <h3 className="font-black text-green-600 uppercase tracking-widest text-xs">{vocabResult.isCorrect ? "Perfectly Spelled" : t('resultCorrected')}</h3>
-                    <div className="p-6 bg-indigo-50 dark:bg-indigo-900/10 rounded-3xl border border-indigo-100 dark:border-indigo-900/30 text-indigo-700 dark:text-indigo-300 font-black text-xl">
+                    <h3 className="font-black text-green-600 uppercase tracking-widest text-xs px-2">{vocabResult.isCorrect ? "Perfectly Spelled" : t('resultCorrected')}</h3>
+                    <div className="p-8 bg-indigo-50 dark:bg-indigo-900/10 rounded-[2rem] border border-indigo-100 dark:border-indigo-900/30 text-indigo-700 dark:text-indigo-300 font-black text-2xl">
                       {vocabResult.corrected}
                     </div>
                   </div>
                 </div>
 
-                <div className="space-y-4">
-                  <h3 className="font-black text-slate-400 uppercase tracking-widest text-xs flex items-center gap-2">
-                    <Lightbulb className="w-4 h-4 text-amber-500" /> Better Alternatives
+                <div className="space-y-8">
+                  <h3 className="font-black text-slate-400 uppercase tracking-widest text-xs px-2 flex items-center gap-2">
+                    <Lightbulb className="w-5 h-5 text-amber-500" /> Better Alternatives
                   </h3>
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                     {vocabResult.alternatives.map((alt, i) => (
                       <button 
                         key={i} 
                         onClick={() => copyToClipboard(alt)}
-                        className="p-5 bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-700 hover:border-indigo-500 transition-all text-left font-bold text-slate-800 dark:text-white flex justify-between items-center group"
+                        className="p-6 bg-white dark:bg-slate-800 rounded-3xl border border-slate-200 dark:border-slate-700 hover:border-indigo-500 transition-all text-left font-black text-slate-800 dark:text-white flex justify-between items-center group shadow-sm"
                       >
                         {alt}
-                        <Copy className="w-4 h-4 text-slate-300 group-hover:text-indigo-500 opacity-0 group-hover:opacity-100 transition-all" />
+                        <Copy className="w-5 h-5 text-slate-300 group-hover:text-indigo-500 opacity-0 group-hover:opacity-100 transition-all" />
                       </button>
                     ))}
                   </div>
-                  <div className="p-4 bg-amber-50 dark:bg-amber-950/20 rounded-2xl border border-amber-100 dark:border-amber-900/30 text-sm text-slate-600 dark:text-slate-400 italic">
+                  <div className="p-8 bg-amber-50 dark:bg-amber-950/20 rounded-[2rem] border border-amber-100 dark:border-amber-900/30 text-base text-slate-600 dark:text-slate-400 italic font-medium leading-relaxed">
                     {vocabResult.explanation}
                   </div>
                 </div>
@@ -341,30 +342,32 @@ export const WritingPage = () => {
             )}
 
             {genResult && (
-              <div className="space-y-6">
-                 <div className="flex justify-between items-center">
-                    <h3 className="font-black text-slate-900 dark:text-white text-2xl">{genTopic}</h3>
-                    <button onClick={() => copyToClipboard(genResult)} className="px-4 py-2 bg-slate-100 dark:bg-slate-800 rounded-xl font-bold text-sm hover:bg-indigo-100 dark:hover:bg-indigo-900/30 transition-colors flex items-center gap-2">
-                       {t('copyText')}
+              <div className="space-y-10">
+                 <div className="flex justify-between items-center px-2">
+                    <h2 className="text-3xl font-black dark:text-white tracking-tight">{genTopic}</h2>
+                    <button onClick={() => copyToClipboard(genResult)} className="px-6 py-3 bg-indigo-600 text-white rounded-2xl font-black text-sm hover:bg-indigo-700 transition-all flex items-center gap-3 shadow-lg shadow-indigo-600/20">
+                       <Copy size={16}/> {t('copyText')}
                     </button>
                  </div>
-                 <div className="prose prose-lg dark:prose-invert max-w-none prose-headings:font-black prose-p:font-medium prose-p:leading-loose">
+                 <div className="prose prose-xl dark:prose-invert max-w-none prose-headings:font-black prose-p:font-bold prose-p:leading-loose bg-slate-50 dark:bg-white/[0.02] p-12 rounded-[3.5rem] border border-slate-100 dark:border-white/[0.05] shadow-inner">
                     <div className="whitespace-pre-wrap">{genResult}</div>
                  </div>
               </div>
             )}
 
             {irabResult && (
-               <div className="space-y-6">
-                 <div className="flex items-center gap-3 justify-center mb-8">
-                   <Book className="w-6 h-6 text-indigo-600" />
-                   <h3 className="text-xl font-black dark:text-white">{input}</h3>
+               <div className="space-y-12">
+                 <div className="flex items-center gap-4 justify-center mb-10">
+                   <div className="p-4 bg-indigo-600 text-white rounded-2xl shadow-xl shadow-indigo-600/20">
+                    <Book className="w-8 h-8" />
+                   </div>
+                   <h3 className="text-3xl font-black dark:text-white font-serif">{input}</h3>
                  </div>
-                 <div className="grid gap-3">
+                 <div className="grid gap-6 max-w-4xl mx-auto">
                    {irabResult.map((item, idx) => (
-                     <div key={idx} className="flex flex-col md:flex-row md:items-center bg-slate-50 dark:bg-slate-800/50 p-4 rounded-2xl border border-slate-100 dark:border-slate-800 hover:border-indigo-300 dark:hover:border-indigo-700 transition-colors">
-                       <div className="md:w-32 font-black text-indigo-600 text-lg mb-2 md:mb-0">{item.word}</div>
-                       <div className="flex-grow font-medium text-slate-700 dark:text-slate-300 font-serif text-lg">{item.analysis}</div>
+                     <div key={idx} className="flex flex-col md:flex-row md:items-center bg-slate-50 dark:bg-slate-800/50 p-8 rounded-[2.5rem] border border-slate-100 dark:border-slate-800 hover:border-indigo-400 dark:hover:border-indigo-600 transition-all group shadow-sm hover:shadow-md">
+                       <div className="md:w-48 font-black text-indigo-600 text-2xl mb-4 md:mb-0 font-serif border-l-4 border-indigo-600/20 pl-4 rtl:border-l-0 rtl:border-r-4 rtl:pr-4">{item.word}</div>
+                       <div className="flex-grow font-bold text-slate-700 dark:text-slate-200 font-serif text-xl leading-relaxed">{item.analysis}</div>
                      </div>
                    ))}
                  </div>
