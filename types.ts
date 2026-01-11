@@ -19,6 +19,7 @@ export interface Message {
   timestamp: number;
   audioUrl?: string;
   sources?: { title: string; uri: string }[];
+  image?: { data: string; mimeType: string };
 }
 
 export interface ChatSession {
