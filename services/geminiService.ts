@@ -30,10 +30,7 @@ export interface AIResponse {
 
 export const extractJson = (text: string) => {
   try {
-    // تنظيف النص من أي زوائد قبل أو بعد الـ JSON
     let cleaned = text.trim();
-    
-    // محاولة إيجاد أول { أو [ وآخر } أو ]
     const startBrace = cleaned.indexOf('{');
     const startBracket = cleaned.indexOf('[');
     const endBrace = cleaned.lastIndexOf('}');
@@ -54,21 +51,18 @@ export const extractJson = (text: string) => {
       const jsonStr = cleaned.substring(start, end + 1);
       return JSON.parse(jsonStr);
     }
-
-    // إذا لم ينجح، نحاول التنظيف العادي
     cleaned = cleaned.replace(/```json/gi, '').replace(/```/g, '').trim();
     return JSON.parse(cleaned);
   } catch (e) {
-    console.error("Critical JSON Parse Error:", e, "Raw text:", text);
     throw new Error("FAILED_TO_PARSE_JSON");
   }
 };
 
 export const generateText = async (prompt: string, options?: GenerateOptions): Promise<AIResponse> => {
-  const modelName = options?.useSearch ? 'gemini-3-pro-preview' : 'gemini-3-flash-preview';
+  // استخدام gemini-3-flash-preview لجميع المهام لضمان أعلى استقرار وأقل معدل خطأ 429
+  const modelName = 'gemini-3-flash-preview';
   let lastError: any = null;
 
-  // Retry logic (3 attempts)
   for (let attempt = 0; attempt < 3; attempt++) {
     try {
       const ai = getAI();
@@ -81,7 +75,7 @@ export const generateText = async (prompt: string, options?: GenerateOptions): P
       }
 
       const config: any = {
-        systemInstruction: options?.systemInstruction || "You are Eyad AI, a professional helpful assistant.",
+        systemInstruction: options?.systemInstruction || "You are Eyad AI, a helpful assistant.",
         temperature: 0.7,
       };
 
@@ -89,6 +83,7 @@ export const generateText = async (prompt: string, options?: GenerateOptions): P
         config.responseMimeType = "application/json";
       }
 
+      // تفعيل البحث فقط إذا طلب المستخدم ذلك
       if (options?.useSearch) {
         config.tools = [{ googleSearch: {} }];
       }
@@ -118,10 +113,9 @@ export const generateText = async (prompt: string, options?: GenerateOptions): P
       lastError = error;
       const status = error.status || (error.message?.includes('429') ? 429 : 500);
       
-      console.warn(`Attempt ${attempt + 1} for ${modelName} failed: ${error.message}`);
-      
+      // إذا كان الخطأ هو Busy، انتظر قليلاً وجرب مرة أخرى
       if (status === 429 || status === 503 || status === 500) {
-        await new Promise(r => setTimeout(r, 1000 * (attempt + 1))); // انتظر قليلاً قبل المحاولة مرة أخرى
+        await new Promise(r => setTimeout(r, 800 * (attempt + 1))); 
         continue;
       }
       break; 

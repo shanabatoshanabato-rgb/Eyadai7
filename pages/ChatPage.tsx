@@ -78,32 +78,19 @@ export const ChatPage: React.FC = () => {
     scrollRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, isTyping]);
 
-  // Speech Recognition Setup
   useEffect(() => {
     const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
     if (SpeechRecognition) {
       const recognition = new SpeechRecognition();
       recognition.continuous = true;
       recognition.interimResults = true;
-      recognition.lang = 'ar-SA'; // Default to Arabic
-
+      recognition.lang = 'ar-SA';
       recognition.onresult = (event: any) => {
-        const transcript = Array.from(event.results)
-          .map((result: any) => result[0])
-          .map((result: any) => result.transcript)
-          .join('');
+        const transcript = Array.from(event.results).map((result: any) => result[0]).map((result: any) => result.transcript).join('');
         setInput(transcript);
       };
-
-      recognition.onerror = (event: any) => {
-        console.error("Speech Recognition Error:", event.error);
-        setIsListening(false);
-      };
-
-      recognition.onend = () => {
-        setIsListening(false);
-      };
-
+      recognition.onerror = () => setIsListening(false);
+      recognition.onend = () => setIsListening(false);
       recognitionRef.current = recognition;
     }
   }, []);
@@ -118,13 +105,12 @@ export const ChatPage: React.FC = () => {
         recognitionRef.current?.start();
         setIsListening(true);
       } catch (e) {
-        console.error("Failed to start recognition", e);
-        setError("Microphone access failed.");
+        setError("Microphone error.");
       }
     }
   };
 
-  const handleSend = async () => {
+  const handleSend = async (retryWithoutSearch = false) => {
     if ((!input.trim() && !attachedImage) || isTyping) return;
     setError(null);
 
@@ -141,32 +127,30 @@ export const ChatPage: React.FC = () => {
       setCurrentSessionId(activeId);
     }
 
-    const userMsg: Message = {
-      id: Date.now().toString(),
-      role: 'user',
-      text: input,
-      timestamp: Date.now()
-    };
-
     const currentInput = input;
     const currentImage = attachedImage;
-    setInput('');
-    setAttachedImage(null);
-    setIsTyping(true);
-    if (isListening) toggleListening();
+    
+    if (!retryWithoutSearch) {
+      const userMsg: Message = { id: Date.now().toString(), role: 'user', text: currentInput, timestamp: Date.now() };
+      setInput('');
+      setAttachedImage(null);
+      if (isListening) toggleListening();
+      setSessions(prev => prev.map(s => s.id === activeId ? {
+        ...s,
+        title: s.messages.length === 0 ? currentInput.trim().substring(0, 30) || s.title : s.title,
+        messages: [...s.messages, userMsg],
+        lastTimestamp: Date.now()
+      } : s));
+    }
 
-    setSessions(prev => prev.map(s => s.id === activeId ? {
-      ...s,
-      title: s.messages.length === 0 ? currentInput.trim().substring(0, 30) || s.title : s.title,
-      messages: [...s.messages, userMsg],
-      lastTimestamp: Date.now()
-    } : s));
+    setIsTyping(true);
 
     try {
-      const aiResponse = await generateText(currentInput || "Analyze image", { 
-        useSearch: true,
+      // المحاولة الأولى مع البحث، إذا فشل السيرفر نجرب بدون بحث تلقائياً
+      const aiResponse = await generateText(currentInput || "حلل الصورة", { 
+        useSearch: !retryWithoutSearch,
         image: currentImage || undefined,
-        systemInstruction: "You are Eyad AI. Be direct, accurate, and use the user's dialect."
+        systemInstruction: "You are Eyad AI, a multi-dialect master. Use Google Search to give accurate facts. Be direct and helpful."
       });
       
       const modelMsg: Message = {
@@ -181,13 +165,17 @@ export const ChatPage: React.FC = () => {
         ...s, messages: [...s.messages, modelMsg], lastTimestamp: Date.now() 
       } : s));
     } catch (err: any) {
-      setError(err.message === "RATE_LIMIT_EXCEEDED" ? "Google is busy, try in 1 minute." : "Connection error. Re-trying...");
+      if (err.message === "RATE_LIMIT_EXCEEDED" && !retryWithoutSearch) {
+        // إذا كان السيرفر مشغول بالبحث، جرب مرة تانية فوراً بس بدون بحث عشان نضمن رد سريع
+        handleSend(true);
+        return;
+      }
+      setError("إياد مشغول شوية، جرب كمان ثواني...");
     } finally {
       setIsTyping(false);
     }
   };
 
-  // Other functions (createNewSession, deleteSession, etc.) remain as they were in previous turns
   const createNewSession = () => {
     const newSession: ChatSession = { id: Date.now().toString(), title: t('newChat'), messages: [], lastTimestamp: Date.now() };
     setSessions(prev => [newSession, ...prev]);
@@ -199,7 +187,7 @@ export const ChatPage: React.FC = () => {
   const startEditing = (id: string, title: string, e: React.MouseEvent) => { e.stopPropagation(); setEditingSessionId(id); setEditTitle(title); };
   const saveRenamedTitle = (id: string) => { if (editTitle.trim()) setSessions(prev => prev.map(s => s.id === id ? { ...s, title: editTitle.trim() } : s)); setEditingSessionId(null); };
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => { const file = e.target.files?.[0]; if (file) { const reader = new FileReader(); reader.onload = () => { const base64 = (reader.result as string).split(',')[1]; setAttachedImage({ data: base64, mimeType: file.type }); }; reader.readAsDataURL(file); } };
-  const speakMessage = async (text: string, id: string) => { if (isPlaying === id) return; setIsPlaying(id); try { const voice = localStorage.getItem('eyad-ai-voice') || DEFAULT_SETTINGS.voiceName; const apiVoice = VOICE_MAP[voice] || 'Kore'; const base64Audio = await generateSpeech(text, apiVoice); if (base64Audio) { if (!audioContextRef.current) audioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 24000 }); const ctx = audioContextRef.current; const buffer = await decodeAudioData(decode(base64Audio), ctx, 24000, 1); const source = ctx.createBufferSource(); source.buffer = buffer; source.connect(ctx.destination); source.onended = () => setIsPlaying(null); source.start(); } else setIsPlaying(null); } catch (e) { setIsPlaying(null); } };
+  const speakMessage = async (text: string, id: string) => { if (isPlaying === id) return; setIsPlaying(id); try { const voice = localStorage.getItem('eyad-ai-voice') || DEFAULT_SETTINGS.voiceName; const apiVoice = VOICE_MAP[voice] || 'Zephyr'; const base64Audio = await generateSpeech(text, apiVoice); if (base64Audio) { if (!audioContextRef.current) audioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 24000 }); const ctx = audioContextRef.current; const buffer = await decodeAudioData(decode(base64Audio), ctx, 24000, 1); const source = ctx.createBufferSource(); source.buffer = buffer; source.connect(ctx.destination); source.onended = () => setIsPlaying(null); source.start(); } else setIsPlaying(null); } catch (e) { setIsPlaying(null); } };
 
   return (
     <div className="flex h-[calc(100vh-64px)] overflow-hidden bg-slate-50 dark:bg-slate-950">
@@ -242,7 +230,7 @@ export const ChatPage: React.FC = () => {
             </div>
           ))}
           {isTyping && <div className="flex justify-start"><div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 px-5 py-3 rounded-3xl rounded-tl-none flex gap-3 items-center shadow-sm"><div className="flex gap-1"><div className="w-2 h-2 bg-blue-500 rounded-full animate-bounce [animation-delay:-0.3s]" /><div className="w-2 h-2 bg-blue-500 rounded-full animate-bounce [animation-delay:-0.15s]" /><div className="w-2 h-2 bg-blue-500 rounded-full animate-bounce" /></div><span className="text-[10px] font-black text-slate-400 tracking-widest uppercase">{t('thinking')}</span></div></div>}
-          {error && <div className="p-4 bg-red-50 dark:bg-red-900/20 border-2 border-red-200 dark:border-red-900 rounded-2xl text-red-600 flex items-center gap-4 animate-in shake duration-500"><AlertCircle className="w-6 h-6 flex-shrink-0" /><div className="flex-grow"><p className="text-xs font-black uppercase tracking-widest opacity-60 mb-1">System Alert</p><p className="text-sm font-bold">{error}</p></div><button onClick={handleSend} className="p-2 bg-red-100 dark:bg-red-800 rounded-xl hover:bg-red-200 dark:hover:bg-red-700 transition-colors"><RefreshCcw className="w-5 h-5" /></button></div>}
+          {error && <div className="p-4 bg-red-50 dark:bg-red-900/20 border-2 border-red-200 dark:border-red-900 rounded-2xl text-red-600 flex items-center gap-4 animate-in shake duration-500"><AlertCircle className="w-6 h-6 flex-shrink-0" /><div className="flex-grow"><p className="text-xs font-black uppercase tracking-widest opacity-60 mb-1">System Alert</p><p className="text-sm font-bold">{error}</p></div><button onClick={() => handleSend()} className="p-2 bg-red-100 dark:bg-red-800 rounded-xl hover:bg-red-200 dark:hover:bg-red-700 transition-colors"><RefreshCcw className="w-5 h-5" /></button></div>}
           <div ref={scrollRef} />
         </div>
 
@@ -256,7 +244,7 @@ export const ChatPage: React.FC = () => {
                 <textarea value={input} onChange={(e) => setInput(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey && window.innerWidth > 1024) { e.preventDefault(); handleSend(); } }} placeholder="اسأل إياد أو استعمل المايك..." className="w-full bg-slate-100 dark:bg-slate-900 border-2 border-transparent focus:border-blue-500/20 focus:bg-white dark:focus:bg-slate-800 rounded-2xl px-5 py-4 outline-none resize-none min-h-[56px] max-h-40 text-slate-900 dark:text-white font-medium transition-all shadow-inner" rows={1} />
               </div>
               <button onClick={toggleListening} className={`p-4 rounded-2xl transition-all shadow-lg flex-shrink-0 ${isListening ? 'bg-red-500 text-white animate-pulse ring-4 ring-red-500/20' : 'bg-slate-100 dark:bg-slate-900 text-slate-500 dark:text-slate-400 hover:text-blue-500'}`}>{isListening ? <MicOff className="w-6 h-6" /> : <Mic className="w-6 h-6" />}</button>
-              <button onClick={handleSend} disabled={(!input.trim() && !attachedImage) || isTyping} className="p-4 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white rounded-2xl shadow-xl flex items-center justify-center transition-all active:scale-90 flex-shrink-0">{isTyping ? <Loader2 className="w-6 h-6 animate-spin" /> : <Send className="w-6 h-6" />}</button>
+              <button onClick={() => handleSend()} disabled={(!input.trim() && !attachedImage) || isTyping} className="p-4 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white rounded-2xl shadow-xl flex items-center justify-center transition-all active:scale-90 flex-shrink-0">{isTyping ? <Loader2 className="w-6 h-6 animate-spin" /> : <Send className="w-6 h-6" />}</button>
             </div>
           </div>
         </div>
