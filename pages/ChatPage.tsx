@@ -16,7 +16,8 @@ import {
   Image as ImageIcon,
   X,
   AlertCircle,
-  ChevronRight
+  ChevronRight,
+  RefreshCw
 } from 'lucide-react';
 import { generateTextStream } from '../services/geminiService';
 import { Message, ChatSession } from '../types';
@@ -25,7 +26,6 @@ import { useTranslation } from '../translations';
 export const ChatPage: React.FC = () => {
   const t = useTranslation();
   
-  // --- التخزين وإدارة الحالة ---
   const [sessions, setSessions] = useState<ChatSession[]>(() => {
     const saved = localStorage.getItem('eyad-ai-v1-sessions');
     return saved ? JSON.parse(saved) : [];
@@ -42,7 +42,7 @@ export const ChatPage: React.FC = () => {
   const [isSidebarOpen, setIsSidebarOpen] = useState(window.innerWidth > 1024);
   const [streamingText, setStreamingText] = useState('');
   const [streamingSources, setStreamingSources] = useState<{title: string, uri: string}[]>([]);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<{msg: string, code: string} | null>(null);
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -52,7 +52,6 @@ export const ChatPage: React.FC = () => {
   const currentSession = sessions.find(s => s.id === activeId);
   const messages = currentSession?.messages || [];
 
-  // --- حفظ الحالة تلقائياً ---
   useEffect(() => {
     localStorage.setItem('eyad-ai-v1-sessions', JSON.stringify(sessions));
   }, [sessions]);
@@ -66,19 +65,15 @@ export const ChatPage: React.FC = () => {
     scrollRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, streamingText, isTyping]);
 
-  // --- التحكم في القائمة الجانبية (إغلاق تلقائي للموبايل) ---
   const closeSidebarOnMobile = () => {
-    if (window.innerWidth < 1024) {
-      setIsSidebarOpen(false);
-    }
+    if (window.innerWidth < 1024) setIsSidebarOpen(false);
   };
 
-  // --- إرسال الرسالة ---
   const handleSend = async (forcedPrompt?: string) => {
     const pText = (forcedPrompt || input).trim();
     if (isSending.current || (!pText && !attachedImage)) return;
 
-    closeSidebarOnMobile(); // قفل القائمة فوراً
+    closeSidebarOnMobile();
     isSending.current = true;
     setError(null);
     setIsTyping(true);
@@ -118,7 +113,7 @@ export const ChatPage: React.FC = () => {
       const stream = generateTextStream(pText, {
         useSearch: true,
         image: backupImg || undefined,
-        systemInstruction: "You are Eyad AI, a helpful engineer. Answer directly and concisely."
+        systemInstruction: "You are Eyad AI, a professional engineer. Answer accurately and verify with search."
       });
 
       let fullText = "";
@@ -146,8 +141,19 @@ export const ChatPage: React.FC = () => {
       setStreamingText('');
       setStreamingSources([]);
     } catch (err: any) {
-      console.error(err);
-      setError("إياد مش قادر يوصل للشبكة. تأكد من إضافة الـ API KEY في إعدادات Vercel.");
+      console.error("Chat Error:", err);
+      let msg = "حصلت مشكلة في الاتصال بالسيرفر. جرب تاني كمان شوية.";
+      let code = "NETWORK_ERROR";
+
+      if (err.message === "API_KEY_MISSING" || err.message === "INVALID_API_KEY") {
+        msg = "الـ API KEY مش شغال أو مش موجود في Vercel. لازم تعيد رفع المشروع (Redeploy).";
+        code = "KEY_ERROR";
+      } else if (err.message === "QUOTA_EXCEEDED") {
+        msg = "خلصت رصيد الاستخدام المجاني النهاردة. استنى شوية وجرب تاني.";
+        code = "QUOTA_ERROR";
+      }
+
+      setError({ msg, code });
       setInput(backupInput);
     } finally {
       setIsTyping(false);
@@ -163,11 +169,6 @@ export const ChatPage: React.FC = () => {
     closeSidebarOnMobile();
   };
 
-  const selectSession = (id: string) => {
-    setActiveId(id);
-    closeSidebarOnMobile();
-  };
-
   const clearHistory = () => {
     if (window.confirm("حذف كل السجل وتصفير البرنامج؟")) {
       setSessions([]);
@@ -175,22 +176,17 @@ export const ChatPage: React.FC = () => {
       localStorage.removeItem('eyad-ai-v1-sessions');
       localStorage.removeItem('eyad-ai-v1-active-id');
       setStreamingText('');
-      setStreamingSources([]);
+      setError(null);
       closeSidebarOnMobile();
     }
   };
 
   return (
-    <div className="flex h-[calc(100vh-64px)] overflow-hidden bg-white dark:bg-slate-950 font-sans">
-      {/* Mobile Overlay */}
+    <div className="flex h-[calc(100vh-64px)] overflow-hidden bg-white dark:bg-slate-950">
       {isSidebarOpen && window.innerWidth < 1024 && (
-        <div 
-          className="fixed inset-0 bg-black/60 z-40 lg:hidden backdrop-blur-md"
-          onClick={() => setIsSidebarOpen(false)}
-        />
+        <div className="fixed inset-0 bg-black/60 z-40 lg:hidden backdrop-blur-md" onClick={() => setIsSidebarOpen(false)} />
       )}
 
-      {/* Taskbar (Sidebar) */}
       <aside className={`fixed lg:relative z-50 h-full bg-slate-50 dark:bg-slate-900 border-r border-slate-200 dark:border-slate-800 transition-all duration-300 ${isSidebarOpen ? 'w-72 translate-x-0' : 'w-0 -translate-x-full lg:translate-x-0 lg:w-0 overflow-hidden invisible lg:visible'}`}>
         <div className="flex flex-col h-full w-72">
           <div className="p-4 flex items-center justify-between border-b border-slate-200 dark:border-slate-800">
@@ -210,11 +206,7 @@ export const ChatPage: React.FC = () => {
               <div className="p-8 text-center text-slate-400 text-xs italic">لا يوجد محادثات قديمة</div>
             ) : (
               sessions.map(s => (
-                <button 
-                  key={s.id}
-                  onClick={() => selectSession(s.id)}
-                  className={`w-full text-right p-3.5 rounded-xl transition-all border flex items-center justify-between group ${activeId === s.id ? 'bg-white dark:bg-slate-800 border-blue-200 dark:border-blue-900 text-blue-600 shadow-sm' : 'border-transparent hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-400'}`}
-                >
+                <button key={s.id} onClick={() => { setActiveId(s.id); closeSidebarOnMobile(); }} className={`w-full text-right p-3.5 rounded-xl transition-all border flex items-center justify-between group ${activeId === s.id ? 'bg-white dark:bg-slate-800 border-blue-200 dark:border-blue-900 text-blue-600' : 'border-transparent hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-400'}`}>
                   <span className="truncate text-sm font-bold flex-grow">{s.title}</span>
                   <ChevronRight className={`w-4 h-4 transition-all ${activeId === s.id ? 'opacity-100 rotate-90 text-blue-500' : 'opacity-0 group-hover:opacity-50'}`} />
                 </button>
@@ -230,7 +222,6 @@ export const ChatPage: React.FC = () => {
         </div>
       </aside>
 
-      {/* Main Container */}
       <div className="flex-grow flex flex-col relative min-w-0">
         <header className="h-16 px-4 flex items-center justify-between border-b border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950/80 backdrop-blur-md z-10">
           <div className="flex items-center gap-3">
@@ -241,7 +232,7 @@ export const ChatPage: React.FC = () => {
           </div>
           <div className="flex items-center gap-2 px-3 py-1 bg-green-50 dark:bg-green-900/20 rounded-full border border-green-100 dark:border-green-900/50">
             <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
-            <span className="text-[10px] font-bold text-green-600 uppercase tracking-widest">Active</span>
+            <span className="text-[10px] font-bold text-green-600 uppercase tracking-widest">Active System</span>
           </div>
         </header>
 
@@ -253,7 +244,7 @@ export const ChatPage: React.FC = () => {
               </div>
               <div className="space-y-3">
                 <h2 className="text-3xl font-black text-slate-900 dark:text-white">أهلاً يا هندسة!</h2>
-                <p className="text-slate-500 dark:text-slate-400 font-medium leading-relaxed">أنا إياد، مساعدك الشخصي. اسألني أي حاجة أو ابعت لي صور عشان أحللها لك.</p>
+                <p className="text-slate-500 dark:text-slate-400 font-medium leading-relaxed">أنا إياد، مساعدك الشخصي المتصل بالإنترنت. اسألني عن أي حاجة أو ارفع صورة.</p>
               </div>
               <div className="grid grid-cols-2 gap-3 w-full">
                 {["أخبار التكنولوجيا", "سعر الذهب الآن", "حل مسألة رياضية", "اكتب لي كود"].map(q => (
@@ -288,7 +279,7 @@ export const ChatPage: React.FC = () => {
               <div className="max-w-[85%] p-5 rounded-2xl bg-white dark:bg-slate-800 border border-slate-100 dark:border-slate-700 text-slate-900 dark:text-slate-100 rounded-tl-none shadow-sm">
                 <p className="whitespace-pre-wrap text-base leading-relaxed font-medium">{streamingText}</p>
                 <div className="flex items-center gap-2 mt-3 text-[10px] text-blue-500 font-bold">
-                  <Loader2 className="w-3.5 h-3.5 animate-spin" /> جاري سحب المعلومات...
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" /> جاري البحث في جوجل...
                 </div>
               </div>
             </div>
@@ -305,14 +296,22 @@ export const ChatPage: React.FC = () => {
           )}
           
           {error && (
-            <div className="p-4 bg-red-50 dark:bg-red-950/20 border border-red-200 dark:border-red-900 rounded-2xl text-red-600 dark:text-red-400 text-sm font-bold flex items-center gap-3 animate-in shake">
-              <AlertCircle className="w-5 h-5 flex-shrink-0" /> {error}
+            <div className="p-5 bg-red-50 dark:bg-red-950/20 border-2 border-red-200 dark:border-red-900 rounded-2xl text-red-600 dark:text-red-400 animate-in shake">
+              <div className="flex items-start gap-3">
+                <AlertCircle className="w-6 h-6 flex-shrink-0 mt-0.5" />
+                <div className="space-y-2">
+                  <p className="font-black text-sm">{error.msg}</p>
+                  <p className="text-[10px] font-bold opacity-50">Error Code: {error.code}</p>
+                  <button onClick={() => window.location.reload()} className="flex items-center gap-2 text-xs font-black uppercase tracking-widest bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700 transition-all">
+                    <RefreshCw className="w-3.5 h-3.5" /> إعادة تحميل الصفحة
+                  </button>
+                </div>
+              </div>
             </div>
           )}
           <div ref={scrollRef} className="h-4" />
         </div>
 
-        {/* Input Area */}
         <div className="p-4 md:p-6 bg-white dark:bg-slate-950 border-t border-slate-200 dark:border-slate-800">
           <div className="max-w-4xl mx-auto flex flex-col gap-4">
             {attachedImage && (
@@ -325,7 +324,7 @@ export const ChatPage: React.FC = () => {
               </div>
             )}
             
-            <div className="flex items-end gap-3 bg-slate-100 dark:bg-slate-900 rounded-3xl p-3 focus-within:ring-2 focus-within:ring-blue-500/30 transition-all border border-transparent focus-within:border-blue-500/50">
+            <div className="flex items-end gap-3 bg-slate-100 dark:bg-slate-900 rounded-3xl p-3 border border-transparent focus-within:border-blue-500/50 focus-within:ring-2 focus-within:ring-blue-500/20 transition-all">
               <input type="file" ref={fileInputRef} onChange={(e) => {
                 const file = e.target.files?.[0];
                 if (file) {
@@ -339,24 +338,13 @@ export const ChatPage: React.FC = () => {
                 <ImageIcon className="w-6 h-6" />
               </button>
               
-              <textarea 
-                rows={1}
-                value={input}
-                onChange={(e) => setInput(e.target.value)}
-                onKeyDown={(e) => { if(e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSend(); } }}
-                placeholder="اسأل إياد عن أي حاجة..."
-                className="flex-grow bg-transparent border-none outline-none py-3 px-2 text-base font-medium resize-none max-h-40 custom-scrollbar dark:text-white"
-              />
+              <textarea rows={1} value={input} onChange={(e) => setInput(e.target.value)} onKeyDown={(e) => { if(e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSend(); } }} placeholder="اسأل إياد عن أي حاجة..." className="flex-grow bg-transparent border-none outline-none py-3 px-2 text-base font-medium resize-none max-h-40 custom-scrollbar dark:text-white" />
               
               <button onClick={() => { if(isListening) recognitionRef.current?.stop(); else { recognitionRef.current?.start(); setIsListening(true); } }} className={`p-3 rounded-full transition-all ${isListening ? 'bg-red-500 text-white shadow-lg animate-pulse' : 'text-slate-500 hover:text-blue-500 hover:bg-white dark:hover:bg-slate-800'}`}>
                 {isListening ? <MicOff className="w-6 h-6" /> : <Mic className="w-6 h-6" />}
               </button>
               
-              <button 
-                onClick={() => handleSend()}
-                disabled={isSending.current || (!input.trim() && !attachedImage)}
-                className="p-4 bg-blue-600 hover:bg-blue-700 text-white rounded-2xl shadow-xl shadow-blue-600/30 disabled:opacity-50 transition-all active:scale-90 flex-shrink-0"
-              >
+              <button onClick={() => handleSend()} disabled={isSending.current || (!input.trim() && !attachedImage)} className="p-4 bg-blue-600 hover:bg-blue-700 text-white rounded-2xl shadow-xl shadow-blue-600/30 disabled:opacity-50 transition-all active:scale-90 flex-shrink-0">
                 {isSending.current ? <Loader2 className="w-6 h-6 animate-spin" /> : <Send className="w-6 h-6" />}
               </button>
             </div>
@@ -369,11 +357,7 @@ export const ChatPage: React.FC = () => {
         .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
         .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
         .dark .custom-scrollbar::-webkit-scrollbar-thumb { background: #334155; }
-        @keyframes shake {
-          0%, 100% { transform: translateX(0); }
-          25% { transform: translateX(-5px); }
-          75% { transform: translateX(5px); }
-        }
+        @keyframes shake { 0%, 100% { transform: translateX(0); } 25% { transform: translateX(-5px); } 75% { transform: translateX(5px); } }
         .animate-in { animation: fadeIn 0.4s ease-out; }
         @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
       `}</style>
