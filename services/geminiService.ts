@@ -3,7 +3,8 @@ import { GoogleGenAI, Modality, GenerateContentResponse } from "@google/genai";
 import { MODELS } from "../constants";
 
 const getApiKey = () => {
-  const key = process.env.API_KEY;
+  // محاولة الحصول على المفتاح من البيئة
+  const key = process.env.API_KEY || (window as any).process?.env?.API_KEY;
   if (!key || key === 'undefined' || key === 'null' || key === '') return null;
   return key;
 };
@@ -26,9 +27,6 @@ export interface AIResponse {
   sources: { title: string; uri: string }[];
 }
 
-/**
- * وظيفة البث المباشر (Streaming) للحصول على أسرع استجابة ممكنة مع استخراج المصادر
- */
 export async function* generateTextStream(prompt: string, options?: GenerateOptions) {
   const ai = getAI();
   const modelName = 'gemini-3-flash-preview';
@@ -39,7 +37,7 @@ export async function* generateTextStream(prompt: string, options?: GenerateOpti
   }
 
   const config: any = {
-    systemInstruction: options?.systemInstruction || "You are Eyad AI, a high-speed, accurate engineer.",
+    systemInstruction: options?.systemInstruction || "You are Eyad AI, an ultra-fast accurate assistant.",
     temperature: 0.1,
     topP: 0.9,
     responseMimeType: options?.responseMimeType,
@@ -63,7 +61,6 @@ export async function* generateTextStream(prompt: string, options?: GenerateOpti
       const text = chunk.text || "";
       fullText += text;
       
-      // استخراج المصادر من Grounding Metadata
       const groundingMetadata = (chunk as any).candidates?.[0]?.groundingMetadata;
       if (groundingMetadata?.groundingChunks) {
         groundingMetadata.groundingChunks.forEach((c: any) => {
@@ -84,9 +81,6 @@ export async function* generateTextStream(prompt: string, options?: GenerateOpti
   }
 }
 
-/**
- * الدالة القديمة للإبقاء على التوافق مع صفحات أخرى
- */
 export const generateText = async (prompt: string, options?: GenerateOptions): Promise<AIResponse> => {
   const ai = getAI();
   const parts: any[] = [{ text: prompt }];

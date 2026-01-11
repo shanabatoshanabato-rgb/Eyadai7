@@ -25,14 +25,14 @@ import { useTranslation } from '../translations';
 export const ChatPage: React.FC = () => {
   const t = useTranslation();
   
-  // --- التحميل من الذاكرة المحلية ---
+  // --- التخزين وإدارة الحالة ---
   const [sessions, setSessions] = useState<ChatSession[]>(() => {
-    const saved = localStorage.getItem('eyad-ai-sessions-v1');
+    const saved = localStorage.getItem('eyad-ai-v1-sessions');
     return saved ? JSON.parse(saved) : [];
   });
   
   const [activeId, setActiveId] = useState<string | null>(() => {
-    return localStorage.getItem('eyad-ai-active-id-v1');
+    return localStorage.getItem('eyad-ai-v1-active-id');
   });
 
   const [input, setInput] = useState('');
@@ -52,45 +52,33 @@ export const ChatPage: React.FC = () => {
   const currentSession = sessions.find(s => s.id === activeId);
   const messages = currentSession?.messages || [];
 
-  // --- حفظ البيانات تلقائياً ---
+  // --- حفظ الحالة تلقائياً ---
   useEffect(() => {
-    localStorage.setItem('eyad-ai-sessions-v1', JSON.stringify(sessions));
+    localStorage.setItem('eyad-ai-v1-sessions', JSON.stringify(sessions));
   }, [sessions]);
 
   useEffect(() => {
-    if (activeId) localStorage.setItem('eyad-ai-active-id-v1', activeId);
-    else localStorage.removeItem('eyad-ai-active-id-v1');
+    if (activeId) localStorage.setItem('eyad-ai-v1-active-id', activeId);
+    else localStorage.removeItem('eyad-ai-v1-active-id');
   }, [activeId]);
 
   useEffect(() => {
     scrollRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, streamingText, isTyping]);
 
-  // --- إعداد التعرف على الصوت ---
-  useEffect(() => {
-    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-    if (SpeechRecognition) {
-      const rec = new SpeechRecognition();
-      rec.continuous = false;
-      rec.lang = 'ar-SA';
-      rec.onresult = (e: any) => setInput(prev => prev + ' ' + e.results[0][0].transcript);
-      rec.onend = () => setIsListening(false);
-      recognitionRef.current = rec;
-    }
-  }, []);
-
-  // --- وظائف التحكم في الواجهة ---
-  const closeSidebarIfMobile = () => {
+  // --- التحكم في القائمة الجانبية (إغلاق تلقائي للموبايل) ---
+  const closeSidebarOnMobile = () => {
     if (window.innerWidth < 1024) {
       setIsSidebarOpen(false);
     }
   };
 
+  // --- إرسال الرسالة ---
   const handleSend = async (forcedPrompt?: string) => {
     const pText = (forcedPrompt || input).trim();
     if (isSending.current || (!pText && !attachedImage)) return;
 
-    closeSidebarIfMobile(); // قفل القائمة فوراً عند الإرسال
+    closeSidebarOnMobile(); // قفل القائمة فوراً
     isSending.current = true;
     setError(null);
     setIsTyping(true);
@@ -100,7 +88,7 @@ export const ChatPage: React.FC = () => {
     const userMsg: Message = {
       id: "u_" + Date.now(),
       role: 'user',
-      text: pText || "تحليل الصورة",
+      text: pText || "تحليل صورة",
       timestamp: Date.now()
     };
 
@@ -130,9 +118,7 @@ export const ChatPage: React.FC = () => {
       const stream = generateTextStream(pText, {
         useSearch: true,
         image: backupImg || undefined,
-        systemInstruction: `You are Eyad AI, the original helpful assistant. 
-        Always provide accurate information and match the user's dialect. 
-        Use Google Search to verify facts.`
+        systemInstruction: "You are Eyad AI, a helpful engineer. Answer directly and concisely."
       });
 
       let fullText = "";
@@ -159,8 +145,9 @@ export const ChatPage: React.FC = () => {
       } : s));
       setStreamingText('');
       setStreamingSources([]);
-    } catch (err) {
-      setError("إياد واجه مشكلة في الشبكة. جرب تاني.");
+    } catch (err: any) {
+      console.error(err);
+      setError("إياد مش قادر يوصل للشبكة. تأكد من إضافة الـ API KEY في إعدادات Vercel.");
       setInput(backupInput);
     } finally {
       setIsTyping(false);
@@ -173,40 +160,45 @@ export const ChatPage: React.FC = () => {
     setInput('');
     setAttachedImage(null);
     setError(null);
-    closeSidebarIfMobile(); // قفل القائمة
+    closeSidebarOnMobile();
   };
 
   const selectSession = (id: string) => {
     setActiveId(id);
-    closeSidebarIfMobile(); // قفل القائمة
+    closeSidebarOnMobile();
   };
 
   const clearHistory = () => {
-    if (window.confirm("حذف كل السجل؟")) {
+    if (window.confirm("حذف كل السجل وتصفير البرنامج؟")) {
       setSessions([]);
       setActiveId(null);
-      localStorage.removeItem('eyad-ai-sessions-v1');
-      localStorage.removeItem('eyad-ai-active-id-v1');
-      closeSidebarIfMobile(); // قفل القائمة
+      localStorage.removeItem('eyad-ai-v1-sessions');
+      localStorage.removeItem('eyad-ai-v1-active-id');
+      setStreamingText('');
+      setStreamingSources([]);
+      closeSidebarOnMobile();
     }
   };
 
   return (
-    <div className="flex h-[calc(100vh-64px)] overflow-hidden bg-white dark:bg-slate-950">
-      {/* Overlay للموبايل */}
+    <div className="flex h-[calc(100vh-64px)] overflow-hidden bg-white dark:bg-slate-950 font-sans">
+      {/* Mobile Overlay */}
       {isSidebarOpen && window.innerWidth < 1024 && (
         <div 
-          className="fixed inset-0 bg-black/50 z-40 lg:hidden backdrop-blur-sm"
+          className="fixed inset-0 bg-black/60 z-40 lg:hidden backdrop-blur-md"
           onClick={() => setIsSidebarOpen(false)}
         />
       )}
 
-      {/* القائمة الجانبية (Taskbar) */}
-      <aside className={`fixed lg:relative z-50 h-full bg-slate-50 dark:bg-slate-900 border-r border-slate-200 dark:border-slate-800 transition-all duration-300 ${isSidebarOpen ? 'w-72 translate-x-0' : 'w-0 -translate-x-full lg:translate-x-0 lg:w-0 overflow-hidden'}`}>
+      {/* Taskbar (Sidebar) */}
+      <aside className={`fixed lg:relative z-50 h-full bg-slate-50 dark:bg-slate-900 border-r border-slate-200 dark:border-slate-800 transition-all duration-300 ${isSidebarOpen ? 'w-72 translate-x-0' : 'w-0 -translate-x-full lg:translate-x-0 lg:w-0 overflow-hidden invisible lg:visible'}`}>
         <div className="flex flex-col h-full w-72">
-          <div className="p-4 border-b border-slate-200 dark:border-slate-800">
-            <button onClick={startNewChat} className="w-full py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-bold flex items-center justify-center gap-2 shadow-lg transition-transform active:scale-95">
+          <div className="p-4 flex items-center justify-between border-b border-slate-200 dark:border-slate-800">
+            <button onClick={startNewChat} className="flex-grow py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-bold flex items-center justify-center gap-2 shadow-lg transition-all active:scale-95">
               <Plus className="w-5 h-5" /> {t('newChat')}
+            </button>
+            <button onClick={() => setIsSidebarOpen(false)} className="lg:hidden p-2 ml-2 text-slate-400">
+              <X className="w-6 h-6" />
             </button>
           </div>
 
@@ -215,16 +207,16 @@ export const ChatPage: React.FC = () => {
               <History className="w-3.5 h-3.5" /> {t('chatHistory')}
             </div>
             {sessions.length === 0 ? (
-              <div className="p-8 text-center text-slate-400 text-xs italic">لا يوجد محادثات</div>
+              <div className="p-8 text-center text-slate-400 text-xs italic">لا يوجد محادثات قديمة</div>
             ) : (
               sessions.map(s => (
                 <button 
                   key={s.id}
                   onClick={() => selectSession(s.id)}
-                  className={`w-full text-right p-3.5 rounded-xl transition-all border flex items-center justify-between group ${activeId === s.id ? 'bg-white dark:bg-slate-800 border-blue-200 dark:border-blue-900 text-blue-600' : 'border-transparent hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-400'}`}
+                  className={`w-full text-right p-3.5 rounded-xl transition-all border flex items-center justify-between group ${activeId === s.id ? 'bg-white dark:bg-slate-800 border-blue-200 dark:border-blue-900 text-blue-600 shadow-sm' : 'border-transparent hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-400'}`}
                 >
-                  <span className="truncate text-sm font-bold">{s.title}</span>
-                  <ChevronRight className={`w-4 h-4 ${activeId === s.id ? 'opacity-100' : 'opacity-0 group-hover:opacity-50'}`} />
+                  <span className="truncate text-sm font-bold flex-grow">{s.title}</span>
+                  <ChevronRight className={`w-4 h-4 transition-all ${activeId === s.id ? 'opacity-100 rotate-90 text-blue-500' : 'opacity-0 group-hover:opacity-50'}`} />
                 </button>
               ))
             )}
@@ -238,34 +230,34 @@ export const ChatPage: React.FC = () => {
         </div>
       </aside>
 
-      {/* منطقة الشات الرئيسية */}
+      {/* Main Container */}
       <div className="flex-grow flex flex-col relative min-w-0">
-        <header className="h-16 px-4 flex items-center justify-between border-b border-slate-200 dark:border-slate-800 bg-white/80 dark:bg-slate-950/80 backdrop-blur-md z-10">
+        <header className="h-16 px-4 flex items-center justify-between border-b border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950/80 backdrop-blur-md z-10">
           <div className="flex items-center gap-3">
-            <button onClick={() => setIsSidebarOpen(!isSidebarOpen)} className="p-2 text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg">
+            <button onClick={() => setIsSidebarOpen(!isSidebarOpen)} className="p-2 text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors">
               {isSidebarOpen ? <PanelLeftClose className="w-5 h-5" /> : <PanelLeftOpen className="w-5 h-5" />}
             </button>
-            <span className="font-black text-blue-600 tracking-tighter text-lg uppercase">Eyad AI</span>
+            <span className="font-black text-blue-600 text-lg uppercase tracking-tighter">Eyad AI</span>
           </div>
           <div className="flex items-center gap-2 px-3 py-1 bg-green-50 dark:bg-green-900/20 rounded-full border border-green-100 dark:border-green-900/50">
             <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
-            <span className="text-[10px] font-bold text-green-600 uppercase tracking-widest">Online</span>
+            <span className="text-[10px] font-bold text-green-600 uppercase tracking-widest">Active</span>
           </div>
         </header>
 
-        <div className="flex-grow overflow-y-auto p-4 md:p-6 space-y-6 custom-scrollbar bg-slate-50/30 dark:bg-slate-900/10">
+        <div className="flex-grow overflow-y-auto p-4 md:p-8 space-y-8 custom-scrollbar bg-slate-50/20 dark:bg-slate-900/10">
           {messages.length === 0 && !streamingText && (
-            <div className="h-full flex flex-col items-center justify-center text-center max-w-md mx-auto space-y-6 animate-in fade-in duration-700">
-              <div className="w-20 h-20 bg-blue-600 rounded-3xl flex items-center justify-center shadow-2xl shadow-blue-600/20">
+            <div className="h-full flex flex-col items-center justify-center text-center max-w-md mx-auto space-y-8 animate-in fade-in duration-700">
+              <div className="w-20 h-20 bg-blue-600 rounded-3xl flex items-center justify-center shadow-2xl shadow-blue-600/30">
                 <Sparkles className="w-10 h-10 text-white" />
               </div>
-              <div className="space-y-2">
-                <h2 className="text-2xl font-black text-slate-900 dark:text-white">أهلاً بك في إياد AI</h2>
-                <p className="text-slate-500 dark:text-slate-400 font-medium leading-relaxed">أنا مساعدك الذكي، اسألني عن أي شيء أو اطلب مني المساعدة في دراستك.</p>
+              <div className="space-y-3">
+                <h2 className="text-3xl font-black text-slate-900 dark:text-white">أهلاً يا هندسة!</h2>
+                <p className="text-slate-500 dark:text-slate-400 font-medium leading-relaxed">أنا إياد، مساعدك الشخصي. اسألني أي حاجة أو ابعت لي صور عشان أحللها لك.</p>
               </div>
-              <div className="grid grid-cols-2 gap-2 w-full">
-                {["أخبار اليوم", "سعر الذهب", "حل مسألة", "اكتب مقال"].map(q => (
-                  <button key={q} onClick={() => handleSend(q)} className="p-3 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl text-xs font-bold hover:border-blue-500 transition-all text-slate-700 dark:text-slate-300 shadow-sm">{q}</button>
+              <div className="grid grid-cols-2 gap-3 w-full">
+                {["أخبار التكنولوجيا", "سعر الذهب الآن", "حل مسألة رياضية", "اكتب لي كود"].map(q => (
+                  <button key={q} onClick={() => handleSend(q)} className="p-4 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl text-xs font-bold hover:border-blue-500 hover:shadow-xl transition-all text-slate-700 dark:text-slate-300 shadow-sm active:scale-95">{q}</button>
                 ))}
               </div>
             </div>
@@ -273,15 +265,15 @@ export const ChatPage: React.FC = () => {
 
           {messages.map((m) => (
             <div key={m.id} className={`flex ${m.role === 'user' ? 'justify-end' : 'justify-start'} animate-in fade-in slide-in-from-bottom-2`}>
-              <div className={`max-w-[85%] p-4 rounded-2xl shadow-sm ${m.role === 'user' ? 'bg-blue-600 text-white rounded-br-none' : 'bg-white dark:bg-slate-800 border border-slate-100 dark:border-slate-700 text-slate-900 dark:text-slate-100 rounded-bl-none'}`}>
-                <p className="whitespace-pre-wrap text-[15px] leading-relaxed font-medium">{m.text}</p>
+              <div className={`max-w-[85%] p-5 rounded-2xl shadow-sm ${m.role === 'user' ? 'bg-blue-600 text-white rounded-br-none' : 'bg-white dark:bg-slate-800 border border-slate-100 dark:border-slate-700 text-slate-900 dark:text-slate-100 rounded-tl-none'}`}>
+                <p className="whitespace-pre-wrap text-base leading-relaxed font-medium">{m.text}</p>
                 {m.sources && m.sources.length > 0 && (
-                  <div className="mt-4 pt-3 border-t border-slate-100 dark:border-slate-700 space-y-2">
-                    <p className="text-[10px] font-black uppercase text-slate-400 flex items-center gap-1.5"><Globe className="w-3 h-3" /> المصادر</p>
+                  <div className="mt-5 pt-4 border-t border-slate-100 dark:border-slate-700 space-y-3">
+                    <p className="text-[10px] font-black uppercase text-slate-400 flex items-center gap-1.5"><Globe className="w-3.5 h-3.5" /> المصادر الحقيقية</p>
                     <div className="flex flex-wrap gap-2">
                       {m.sources.map((src, i) => (
-                        <a key={i} href={src.uri} target="_blank" rel="noreferrer" className="flex items-center gap-1 px-2 py-1 bg-slate-50 dark:bg-slate-700 rounded-lg text-[10px] font-bold text-blue-600 hover:bg-blue-100 transition-all">
-                          <ExternalLink className="w-3 h-3" /> {src.title.substring(0, 15)}...
+                        <a key={i} href={src.uri} target="_blank" rel="noreferrer" className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-50 dark:bg-slate-700 rounded-xl text-[10px] font-bold text-blue-600 hover:bg-blue-100 transition-all border border-transparent hover:border-blue-200">
+                          <ExternalLink className="w-3 h-3" /> {src.title.substring(0, 20)}...
                         </a>
                       ))}
                     </div>
@@ -293,18 +285,18 @@ export const ChatPage: React.FC = () => {
 
           {streamingText && (
             <div className="flex justify-start animate-in fade-in">
-              <div className="max-w-[85%] p-4 rounded-2xl bg-white dark:bg-slate-800 border border-slate-100 dark:border-slate-700 text-slate-900 dark:text-slate-100 rounded-bl-none shadow-sm">
-                <p className="whitespace-pre-wrap text-[15px] leading-relaxed font-medium">{streamingText}</p>
-                <div className="flex items-center gap-2 mt-2 text-[10px] text-blue-500 font-bold">
-                  <Loader2 className="w-3 h-3 animate-spin" /> جاري الكتابة...
+              <div className="max-w-[85%] p-5 rounded-2xl bg-white dark:bg-slate-800 border border-slate-100 dark:border-slate-700 text-slate-900 dark:text-slate-100 rounded-tl-none shadow-sm">
+                <p className="whitespace-pre-wrap text-base leading-relaxed font-medium">{streamingText}</p>
+                <div className="flex items-center gap-2 mt-3 text-[10px] text-blue-500 font-bold">
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" /> جاري سحب المعلومات...
                 </div>
               </div>
             </div>
           )}
 
           {isTyping && (
-            <div className="flex items-center gap-2 p-3 bg-white dark:bg-slate-800 rounded-xl w-fit shadow-sm border border-slate-100 dark:border-slate-700">
-              <div className="flex gap-1">
+            <div className="flex items-center gap-2 p-4 bg-white dark:bg-slate-800 rounded-2xl w-fit shadow-sm border border-slate-100 dark:border-slate-700">
+              <div className="flex gap-1.5">
                 <div className="w-1.5 h-1.5 bg-blue-500 rounded-full animate-bounce [animation-delay:-0.3s]" />
                 <div className="w-1.5 h-1.5 bg-blue-500 rounded-full animate-bounce [animation-delay:-0.15s]" />
                 <div className="w-1.5 h-1.5 bg-blue-500 rounded-full animate-bounce" />
@@ -313,23 +305,27 @@ export const ChatPage: React.FC = () => {
           )}
           
           {error && (
-            <div className="p-3 bg-red-50 dark:bg-red-950/20 border border-red-200 rounded-xl text-red-600 text-sm font-bold flex items-center gap-2">
-              <AlertCircle className="w-4 h-4" /> {error}
+            <div className="p-4 bg-red-50 dark:bg-red-950/20 border border-red-200 dark:border-red-900 rounded-2xl text-red-600 dark:text-red-400 text-sm font-bold flex items-center gap-3 animate-in shake">
+              <AlertCircle className="w-5 h-5 flex-shrink-0" /> {error}
             </div>
           )}
-          <div ref={scrollRef} className="h-2" />
+          <div ref={scrollRef} className="h-4" />
         </div>
 
-        <div className="p-4 bg-white dark:bg-slate-950 border-t border-slate-200 dark:border-slate-800">
-          <div className="max-w-4xl mx-auto flex flex-col gap-3">
+        {/* Input Area */}
+        <div className="p-4 md:p-6 bg-white dark:bg-slate-950 border-t border-slate-200 dark:border-slate-800">
+          <div className="max-w-4xl mx-auto flex flex-col gap-4">
             {attachedImage && (
-              <div className="flex items-center gap-2 p-1 bg-slate-100 dark:bg-slate-800 rounded-lg w-fit">
-                <img src={`data:${attachedImage.mimeType};base64,${attachedImage.data}`} className="w-12 h-12 rounded object-cover" alt="upload" />
-                <button onClick={() => setAttachedImage(null)} className="p-1 text-red-500"><X className="w-4 h-4" /></button>
+              <div className="flex items-center gap-3 p-2 bg-blue-50 dark:bg-blue-900/30 rounded-xl w-fit border border-blue-100 dark:border-blue-900/50">
+                <div className="relative">
+                  <img src={`data:${attachedImage.mimeType};base64,${attachedImage.data}`} className="w-16 h-16 rounded-lg object-cover shadow-md" alt="upload" />
+                  <button onClick={() => setAttachedImage(null)} className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-1 shadow-lg hover:bg-red-600 transition-colors"><X className="w-4 h-4" /></button>
+                </div>
+                <p className="text-[10px] font-black uppercase text-blue-600 px-2">تم رفع الصورة</p>
               </div>
             )}
             
-            <div className="flex items-end gap-2 bg-slate-100 dark:bg-slate-900 rounded-2xl p-2">
+            <div className="flex items-end gap-3 bg-slate-100 dark:bg-slate-900 rounded-3xl p-3 focus-within:ring-2 focus-within:ring-blue-500/30 transition-all border border-transparent focus-within:border-blue-500/50">
               <input type="file" ref={fileInputRef} onChange={(e) => {
                 const file = e.target.files?.[0];
                 if (file) {
@@ -338,8 +334,9 @@ export const ChatPage: React.FC = () => {
                   reader.readAsDataURL(file);
                 }
               }} className="hidden" accept="image/*" />
-              <button onClick={() => fileInputRef.current?.click()} className="p-3 text-slate-500 hover:text-blue-500 transition-colors">
-                <ImageIcon className="w-5 h-5" />
+              
+              <button onClick={() => fileInputRef.current?.click()} className="p-3 text-slate-500 hover:text-blue-500 hover:bg-white dark:hover:bg-slate-800 rounded-full transition-all">
+                <ImageIcon className="w-6 h-6" />
               </button>
               
               <textarea 
@@ -347,20 +344,20 @@ export const ChatPage: React.FC = () => {
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
                 onKeyDown={(e) => { if(e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSend(); } }}
-                placeholder="اسأل إياد..."
-                className="flex-grow bg-transparent border-none outline-none py-3 px-2 text-[15px] font-medium resize-none max-h-32 dark:text-white"
+                placeholder="اسأل إياد عن أي حاجة..."
+                className="flex-grow bg-transparent border-none outline-none py-3 px-2 text-base font-medium resize-none max-h-40 custom-scrollbar dark:text-white"
               />
               
-              <button onClick={() => { if(isListening) recognitionRef.current?.stop(); else { recognitionRef.current?.start(); setIsListening(true); } }} className={`p-3 rounded-full transition-all ${isListening ? 'bg-red-500 text-white' : 'text-slate-500 hover:text-blue-500'}`}>
-                {isListening ? <MicOff className="w-5 h-5" /> : <Mic className="w-5 h-5" />}
+              <button onClick={() => { if(isListening) recognitionRef.current?.stop(); else { recognitionRef.current?.start(); setIsListening(true); } }} className={`p-3 rounded-full transition-all ${isListening ? 'bg-red-500 text-white shadow-lg animate-pulse' : 'text-slate-500 hover:text-blue-500 hover:bg-white dark:hover:bg-slate-800'}`}>
+                {isListening ? <MicOff className="w-6 h-6" /> : <Mic className="w-6 h-6" />}
               </button>
               
               <button 
                 onClick={() => handleSend()}
                 disabled={isSending.current || (!input.trim() && !attachedImage)}
-                className="p-3 bg-blue-600 hover:bg-blue-700 text-white rounded-xl shadow-lg shadow-blue-600/20 disabled:opacity-50 transition-transform active:scale-90"
+                className="p-4 bg-blue-600 hover:bg-blue-700 text-white rounded-2xl shadow-xl shadow-blue-600/30 disabled:opacity-50 transition-all active:scale-90 flex-shrink-0"
               >
-                {isSending.current ? <Loader2 className="w-5 h-5 animate-spin" /> : <Send className="w-5 h-5" />}
+                {isSending.current ? <Loader2 className="w-6 h-6 animate-spin" /> : <Send className="w-6 h-6" />}
               </button>
             </div>
           </div>
@@ -372,6 +369,13 @@ export const ChatPage: React.FC = () => {
         .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
         .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
         .dark .custom-scrollbar::-webkit-scrollbar-thumb { background: #334155; }
+        @keyframes shake {
+          0%, 100% { transform: translateX(0); }
+          25% { transform: translateX(-5px); }
+          75% { transform: translateX(5px); }
+        }
+        .animate-in { animation: fadeIn 0.4s ease-out; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
       `}</style>
     </div>
   );
