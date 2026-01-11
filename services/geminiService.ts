@@ -59,7 +59,7 @@ export const extractJson = (text: string) => {
 };
 
 export const generateText = async (prompt: string, options?: GenerateOptions): Promise<AIResponse> => {
-  // استخدام gemini-3-flash-preview للسرعة القصوى والاستقرار
+  // استخدام أحدث موديل فلاش للسرعة والدقة معاً
   const modelName = 'gemini-3-flash-preview';
   let lastError: any = null;
 
@@ -75,17 +75,16 @@ export const generateText = async (prompt: string, options?: GenerateOptions): P
       }
 
       const config: any = {
-        systemInstruction: options?.systemInstruction || "You are Eyad AI, a highly accurate and professional assistant.",
-        temperature: 0.1, // أقل قيمة ممكنة لضمان الدقة المعلوماتية وعدم التخمين
-        topP: 0.8,
-        topK: 40,
+        systemInstruction: options?.systemInstruction || "You are Eyad AI, a highly accurate, professional, and fast assistant.",
+        temperature: 0.1, // لضمان أقصى درجات الدقة وعدم التخمين
+        topP: 0.9,
+        topK: 20,
       };
 
       if (options?.responseMimeType === "application/json") {
         config.responseMimeType = "application/json";
       }
 
-      // تفعيل البحث لضمان تحديث المعلومات ودقتها
       if (options?.useSearch) {
         config.tools = [{ googleSearch: {} }];
       }
@@ -116,7 +115,7 @@ export const generateText = async (prompt: string, options?: GenerateOptions): P
       const status = error.status || (error.message?.includes('429') ? 429 : 500);
       
       if (status === 429 || status === 503 || status === 500) {
-        await new Promise(r => setTimeout(r, 500 * (attempt + 1))); 
+        await new Promise(r => setTimeout(r, 1000 * (attempt + 1))); 
         continue;
       }
       break; 
@@ -134,7 +133,7 @@ export const generateSpeech = async (text: string, voiceName: string = 'Kore'): 
       model: MODELS.AUDIO,
       contents: [{ parts: [{ text }] }],
       config: {
-        responseModalities: [Modality.AUDIO], // تم تصحيح الكلمة هنا لإنهاء خطأ الـ Build
+        responseModalities: [Modality.AUDIO],
         speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName } } }
       }
     });

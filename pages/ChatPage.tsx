@@ -19,7 +19,6 @@ import {
   PanelLeftOpen,
   History,
   Edit2,
-  Check,
   Mic,
   MicOff
 } from 'lucide-react';
@@ -54,6 +53,7 @@ export const ChatPage: React.FC = () => {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
   const recognitionRef = useRef<any>(null);
+  const isSendingRef = useRef(false);
 
   const currentSession = useMemo(() => 
     sessions.find(s => s.id === currentSessionId), 
@@ -110,50 +110,57 @@ export const ChatPage: React.FC = () => {
     }
   };
 
-  const handleSend = async (retryWithoutSearch = false) => {
-    if ((!input.trim() && !attachedImage) || isTyping) return;
+  const handleSend = async (retryMsg?: string, retryImg?: {data: string, mimeType: string}) => {
+    if (isSendingRef.current || (!input.trim() && !attachedImage && !retryMsg)) return;
+    
+    isSendingRef.current = true;
     setError(null);
+    setIsTyping(true);
+
+    const currentInput = retryMsg || input.trim();
+    const currentImage = retryImg || attachedImage;
+    const userMsgId = Date.now().toString();
+    const userMsg: Message = { id: userMsgId, role: 'user', text: currentInput || (currentImage ? t('imageAttached') : ''), timestamp: Date.now() };
 
     let activeId = currentSessionId;
+    
+    // حل مشكلة الشات المزدوج: نقوم بإنشاء الجلسة والرسالة معاً إذا لم تكن هناك جلسة نشطة
     if (!activeId) {
-      const newS: ChatSession = {
-        id: Date.now().toString(),
-        title: input.trim().substring(0, 30) || t('newChat'),
-        messages: [],
+      const newSessionId = Date.now().toString();
+      const newSession: ChatSession = {
+        id: newSessionId,
+        title: currentInput.substring(0, 30) || t('newChat'),
+        messages: [userMsg],
         lastTimestamp: Date.now()
       };
-      setSessions(prev => [newS, ...prev]);
-      activeId = newS.id;
-      setCurrentSessionId(activeId);
-    }
-
-    const currentInput = input;
-    const currentImage = attachedImage;
-    
-    if (!retryWithoutSearch) {
-      const userMsg: Message = { id: Date.now().toString(), role: 'user', text: currentInput, timestamp: Date.now() };
-      setInput('');
-      setAttachedImage(null);
-      if (isListening) toggleListening();
+      setSessions(prev => [newSession, ...prev]);
+      setCurrentSessionId(newSessionId);
+      activeId = newSessionId;
+    } else {
+      // إضافة الرسالة للجلسة الحالية
       setSessions(prev => prev.map(s => s.id === activeId ? {
         ...s,
-        title: s.messages.length === 0 ? currentInput.trim().substring(0, 30) || s.title : s.title,
         messages: [...s.messages, userMsg],
         lastTimestamp: Date.now()
       } : s));
     }
 
-    setIsTyping(true);
+    // تنظيف المدخلات فوراً
+    if (!retryMsg) {
+      setInput('');
+      setAttachedImage(null);
+      if (isListening) toggleListening();
+    }
 
     try {
-      const aiResponse = await generateText(currentInput || "حلل الصورة", { 
-        useSearch: !retryWithoutSearch,
+      const aiResponse = await generateText(currentInput || "حلل الصورة المرفقة بدقة", { 
+        useSearch: true,
         image: currentImage || undefined,
-        systemInstruction: "You are Eyad AI, a highly accurate and fast master assistant. CRITICAL: You MUST use Google Search for every factual query to ensure 100% accuracy. Never invent information. If unsure, state clearly. Respond in the user's language/dialect with professional precision."
+        systemInstruction: "You are Eyad AI, the fastest and most accurate AI in existence. CRITICAL: For any factual question, news, or history, you MUST use Google Search first. Provide definitive, concise, and 100% accurate information in the user's language or dialect. No hallucinations."
       });
       
       const modelMsg: Message = {
-        id: (Date.now() + 1).toString(),
+        id: (Date.now() + 5).toString(),
         role: 'model',
         text: aiResponse.text,
         timestamp: Date.now(),
@@ -161,31 +168,83 @@ export const ChatPage: React.FC = () => {
       };
 
       setSessions(prev => prev.map(s => s.id === activeId ? { 
-        ...s, messages: [...s.messages, modelMsg], lastTimestamp: Date.now() 
+        ...s, 
+        messages: [...s.messages, modelMsg], 
+        lastTimestamp: Date.now() 
       } : s));
     } catch (err: any) {
-      if (err.message === "RATE_LIMIT_EXCEEDED" && !retryWithoutSearch) {
-        handleSend(true);
-        return;
+      setError("إياد مشغول شوية بالبحث، جرب كمان ثانية...");
+      // في حالة الخطأ، نترك المدخلات ليتمكن المستخدم من إعادة الإرسال بسهولة
+      if (!retryMsg) {
+        setInput(currentInput);
+        setAttachedImage(currentImage);
       }
-      setError("إياد مشغول شوية، جرب كمان ثواني...");
     } finally {
       setIsTyping(false);
+      isSendingRef.current = false;
     }
   };
 
   const createNewSession = () => {
-    const newSession: ChatSession = { id: Date.now().toString(), title: t('newChat'), messages: [], lastTimestamp: Date.now() };
-    setSessions(prev => [newSession, ...prev]);
-    setCurrentSessionId(newSession.id);
+    setCurrentSessionId(null);
+    setInput('');
+    setAttachedImage(null);
     if (window.innerWidth < 1024) setIsSidebarOpen(false);
   };
-  const deleteSession = (id: string, e: React.MouseEvent) => { e.stopPropagation(); setSessions(prev => prev.filter(s => s.id !== id)); if (currentSessionId === id) setCurrentSessionId(null); };
-  const deleteMessage = (msgId: string) => { if (!currentSessionId) return; setSessions(prev => prev.map(s => s.id === currentSessionId ? { ...s, messages: s.messages.filter(m => m.id !== msgId) } : s)); };
-  const startEditing = (id: string, title: string, e: React.MouseEvent) => { e.stopPropagation(); setEditingSessionId(id); setEditTitle(title); };
-  const saveRenamedTitle = (id: string) => { if (editTitle.trim()) setSessions(prev => prev.map(s => s.id === id ? { ...s, title: editTitle.trim() } : s)); setEditingSessionId(null); };
-  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => { const file = e.target.files?.[0]; if (file) { const reader = new FileReader(); reader.onload = () => { const base64 = (reader.result as string).split(',')[1]; setAttachedImage({ data: base64, mimeType: file.type }); }; reader.readAsDataURL(file); } };
-  const speakMessage = async (text: string, id: string) => { if (isPlaying === id) return; setIsPlaying(id); try { const voice = localStorage.getItem('eyad-ai-voice') || DEFAULT_SETTINGS.voiceName; const apiVoice = VOICE_MAP[voice] || 'Zephyr'; const base64Audio = await generateSpeech(text, apiVoice); if (base64Audio) { if (!audioContextRef.current) audioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 24000 }); const ctx = audioContextRef.current; const buffer = await decodeAudioData(decode(base64Audio), ctx, 24000, 1); const source = ctx.createBufferSource(); source.buffer = buffer; source.connect(ctx.destination); source.onended = () => setIsPlaying(null); source.start(); } else setIsPlaying(null); } catch (e) { setIsPlaying(null); } };
+
+  const deleteSession = (id: string, e: React.MouseEvent) => { 
+    e.stopPropagation(); 
+    setSessions(prev => prev.filter(s => s.id !== id)); 
+    if (currentSessionId === id) setCurrentSessionId(null); 
+  };
+
+  const deleteMessage = (msgId: string) => { 
+    if (!currentSessionId) return; 
+    setSessions(prev => prev.map(s => s.id === currentSessionId ? { ...s, messages: s.messages.filter(m => m.id !== msgId) } : s)); 
+  };
+
+  const startEditing = (id: string, title: string, e: React.MouseEvent) => { 
+    e.stopPropagation(); 
+    setEditingSessionId(id); 
+    setEditTitle(title); 
+  };
+
+  const saveRenamedTitle = (id: string) => { 
+    if (editTitle.trim()) setSessions(prev => prev.map(s => s.id === id ? { ...s, title: editTitle.trim() } : s)); 
+    setEditingSessionId(null); 
+  };
+
+  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => { 
+    const file = e.target.files?.[0]; 
+    if (file) { 
+      const reader = new FileReader(); 
+      reader.onload = () => { 
+        const base64 = (reader.result as string).split(',')[1]; 
+        setAttachedImage({ data: base64, mimeType: file.type }); 
+      }; 
+      reader.readAsDataURL(file); 
+    } 
+  };
+
+  const speakMessage = async (text: string, id: string) => { 
+    if (isPlaying === id) return; 
+    setIsPlaying(id); 
+    try { 
+      const voice = localStorage.getItem('eyad-ai-voice') || DEFAULT_SETTINGS.voiceName; 
+      const apiVoice = VOICE_MAP[voice] || 'Zephyr'; 
+      const base64Audio = await generateSpeech(text, apiVoice); 
+      if (base64Audio) { 
+        if (!audioContextRef.current) audioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 24000 }); 
+        const ctx = audioContextRef.current; 
+        const buffer = await decodeAudioData(decode(base64Audio), ctx, 24000, 1); 
+        const source = ctx.createBufferSource(); 
+        source.buffer = buffer; 
+        source.connect(ctx.destination); 
+        source.onended = () => setIsPlaying(null); 
+        source.start(); 
+      } else setIsPlaying(null); 
+    } catch (e) { setIsPlaying(null); } 
+  };
 
   return (
     <div className="flex h-[calc(100vh-64px)] overflow-hidden bg-slate-50 dark:bg-slate-950">
@@ -239,10 +298,29 @@ export const ChatPage: React.FC = () => {
               <input type="file" ref={fileInputRef} onChange={handleImageUpload} accept="image/*" className="hidden" />
               <button onClick={() => fileInputRef.current?.click()} className="p-4 bg-slate-100 dark:bg-slate-900 text-slate-500 dark:text-slate-400 rounded-2xl hover:bg-slate-200 dark:hover:bg-slate-800 transition-all border border-slate-200 dark:border-slate-800 shadow-sm flex-shrink-0"><Paperclip className="w-6 h-6" /></button>
               <div className="flex-grow relative flex items-center">
-                <textarea value={input} onChange={(e) => setInput(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey && window.innerWidth > 1024) { e.preventDefault(); handleSend(); } }} placeholder="اسأل إياد أو استعمل المايك..." className="w-full bg-slate-100 dark:bg-slate-900 border-2 border-transparent focus:border-blue-500/20 focus:bg-white dark:focus:bg-slate-800 rounded-2xl px-5 py-4 outline-none resize-none min-h-[56px] max-h-40 text-slate-900 dark:text-white font-medium transition-all shadow-inner" rows={1} />
+                <textarea 
+                  value={input} 
+                  onChange={(e) => setInput(e.target.value)} 
+                  onKeyDown={(e) => { 
+                    if (e.key === 'Enter' && !e.shiftKey) { 
+                      e.preventDefault(); 
+                      handleSend(); 
+                    } 
+                  }} 
+                  disabled={isTyping}
+                  placeholder="اسأل إياد أو استعمل المايك..." 
+                  className="w-full bg-slate-100 dark:bg-slate-900 border-2 border-transparent focus:border-blue-500/20 focus:bg-white dark:focus:bg-slate-800 rounded-2xl px-5 py-4 outline-none resize-none min-h-[56px] max-h-40 text-slate-900 dark:text-white font-medium transition-all shadow-inner disabled:opacity-50" 
+                  rows={1} 
+                />
               </div>
-              <button onClick={toggleListening} className={`p-4 rounded-2xl transition-all shadow-lg flex-shrink-0 ${isListening ? 'bg-red-500 text-white animate-pulse ring-4 ring-red-500/20' : 'bg-slate-100 dark:bg-slate-900 text-slate-500 dark:text-slate-400 hover:text-blue-500'}`}>{isListening ? <MicOff className="w-6 h-6" /> : <Mic className="w-6 h-6" />}</button>
-              <button onClick={() => handleSend()} disabled={(!input.trim() && !attachedImage) || isTyping} className="p-4 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white rounded-2xl shadow-xl flex items-center justify-center transition-all active:scale-90 flex-shrink-0">{isTyping ? <Loader2 className="w-6 h-6 animate-spin" /> : <Send className="w-6 h-6" />}</button>
+              <button onClick={toggleListening} disabled={isTyping} className={`p-4 rounded-2xl transition-all shadow-lg flex-shrink-0 disabled:opacity-50 ${isListening ? 'bg-red-500 text-white animate-pulse ring-4 ring-red-500/20' : 'bg-slate-100 dark:bg-slate-900 text-slate-500 dark:text-slate-400 hover:text-blue-500'}`}>{isListening ? <MicOff className="w-6 h-6" /> : <Mic className="w-6 h-6" />}</button>
+              <button 
+                onClick={() => handleSend()} 
+                disabled={(!input.trim() && !attachedImage) || isTyping} 
+                className="p-4 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white rounded-2xl shadow-xl flex items-center justify-center transition-all active:scale-90 flex-shrink-0"
+              >
+                {isTyping ? <Loader2 className="w-6 h-6 animate-spin" /> : <Send className="w-6 h-6" />}
+              </button>
             </div>
           </div>
         </div>
