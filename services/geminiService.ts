@@ -3,8 +3,11 @@ import { GoogleGenAI, Modality } from "@google/genai";
 import { MODELS } from "../constants";
 
 export const getAI = () => {
-  if (!process.env.API_KEY) throw new Error("API_KEY_MISSING");
-  return new GoogleGenAI({ apiKey: process.env.API_KEY });
+  const apiKey = process.env.API_KEY;
+  if (!apiKey || apiKey === '') {
+    throw new Error("MISSING_API_KEY");
+  }
+  return new GoogleGenAI({ apiKey });
 };
 
 export const extractJson = (text: string) => {
@@ -30,25 +33,25 @@ interface GenerateOptions {
 }
 
 export async function* generateTextStream(prompt: string, options?: GenerateOptions) {
-  const ai = getAI();
-  const modelName = options?.model || MODELS.GENERAL;
-  
-  const parts: any[] = [{ text: prompt }];
-  if (options?.image) {
-    parts.push({ inlineData: { data: options.image.data, mimeType: options.image.mimeType } });
-  }
-
-  const config: any = {
-    systemInstruction: options?.systemInstruction || "You are Eyad AI, a world-class assistant.",
-    temperature: 0.7,
-    responseMimeType: options?.responseMimeType,
-  };
-
-  if (options?.useSearch) {
-    config.tools = [{ googleSearch: {} }];
-  }
-
   try {
+    const ai = getAI();
+    const modelName = options?.model || MODELS.GENERAL;
+    
+    const parts: any[] = [{ text: prompt }];
+    if (options?.image) {
+      parts.push({ inlineData: { data: options.image.data, mimeType: options.image.mimeType } });
+    }
+
+    const config: any = {
+      systemInstruction: options?.systemInstruction || "You are Eyad AI, a helpful educational assistant.",
+      temperature: 0.7,
+      responseMimeType: options?.responseMimeType,
+    };
+
+    if (options?.useSearch) {
+      config.tools = [{ googleSearch: {} }];
+    }
+
     const result = await ai.models.generateContentStream({
       model: modelName,
       contents: { parts },
@@ -74,36 +77,44 @@ export async function* generateTextStream(prompt: string, options?: GenerateOpti
       yield { text, fullText, sources };
     }
   } catch (error: any) {
-    console.error("Stream Error:", error);
-    throw error;
+    console.error("Gemini Stream Error:", error);
+    if (error.message?.includes("429")) throw new Error("QUOTA_EXCEEDED");
+    if (error.message?.includes("403") || error.message?.includes("401")) throw new Error("INVALID_KEY");
+    if (error.message === "MISSING_API_KEY") throw error;
+    throw new Error("CONNECTION_FAILED");
   }
 }
 
 export const generateText = async (prompt: string, options?: GenerateOptions) => {
-  const ai = getAI();
-  const parts: any[] = [{ text: prompt }];
-  if (options?.image) parts.push({ inlineData: { data: options.image.data, mimeType: options.image.mimeType } });
-  
-  const response = await ai.models.generateContent({
-    model: options?.model || MODELS.COMPLEX,
-    contents: { parts },
-    config: {
-      systemInstruction: options?.systemInstruction,
-      temperature: 0.1,
-      tools: options?.useSearch ? [{ googleSearch: {} }] : [],
-      responseMimeType: options?.responseMimeType,
-    }
-  });
-
-  const sources: any[] = [];
-  const groundingChunks = (response as any).candidates?.[0]?.groundingMetadata?.groundingChunks;
-  if (groundingChunks) {
-    groundingChunks.forEach((c: any) => {
-      if (c.web) sources.push({ title: c.web.title || c.web.uri, uri: c.web.uri });
+  try {
+    const ai = getAI();
+    const parts: any[] = [{ text: prompt }];
+    if (options?.image) parts.push({ inlineData: { data: options.image.data, mimeType: options.image.mimeType } });
+    
+    const response = await ai.models.generateContent({
+      model: options?.model || MODELS.COMPLEX,
+      contents: { parts },
+      config: {
+        systemInstruction: options?.systemInstruction,
+        temperature: 0.1,
+        tools: options?.useSearch ? [{ googleSearch: {} }] : [],
+        responseMimeType: options?.responseMimeType,
+      }
     });
-  }
 
-  return { text: response.text || "", sources };
+    const sources: any[] = [];
+    const groundingChunks = (response as any).candidates?.[0]?.groundingMetadata?.groundingChunks;
+    if (groundingChunks) {
+      groundingChunks.forEach((c: any) => {
+        if (c.web) sources.push({ title: c.web.title || c.web.uri, uri: c.web.uri });
+      });
+    }
+
+    return { text: response.text || "", sources };
+  } catch (error: any) {
+    console.error("Gemini Text Error:", error);
+    throw error;
+  }
 };
 
 export const decode = (base64: string) => {
