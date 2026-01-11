@@ -53,8 +53,8 @@ export const ChatPage: React.FC = () => {
   const audioContextRef = useRef<AudioContext | null>(null);
   const recognitionRef = useRef<any>(null);
   
-  // القفل البرمجي النهائي لمنع تكرار الإرسال
-  const isSendingRef = useRef(false);
+  // قفل برمجي لمنع العمليات المتوازية
+  const isProcessingRef = useRef(false);
 
   const currentSession = useMemo(() => 
     sessions.find(s => s.id === currentSessionId), 
@@ -113,10 +113,10 @@ export const ChatPage: React.FC = () => {
 
   const handleSend = async (retryInput?: string) => {
     const finalInput = (retryInput || input).trim();
-    if (isSendingRef.current || (!finalInput && !attachedImage)) return;
+    if (isProcessingRef.current || (!finalInput && !attachedImage)) return;
     
-    // تفعيل القفل فوراً
-    isSendingRef.current = true;
+    // تفعيل القفل فوراً وبقوة
+    isProcessingRef.current = true;
     setError(null);
     setIsTyping(true);
 
@@ -129,20 +129,18 @@ export const ChatPage: React.FC = () => {
 
     let activeId = currentSessionId;
 
-    // حالة إنشاء شات جديد: نضمن عدم تكرارها
+    // معالجة "الدردشة الجديدة" بشكل ذري
     if (!activeId) {
-      const newId = "s_" + Date.now();
+      activeId = "s_" + Date.now();
       const newSession: ChatSession = {
-        id: newId,
+        id: activeId,
         title: finalInput.substring(0, 30) || t('newChat'),
         messages: [userMsg],
         lastTimestamp: Date.now()
       };
-      
-      // دمج التحديثات لمنع أي ثغرة زمنية
+      // تحديث الحالة بشكل وظيفي لضمان التزامن
       setSessions(prev => [newSession, ...prev]);
-      setCurrentSessionId(newId);
-      activeId = newId;
+      setCurrentSessionId(activeId);
     } else {
       setSessions(prev => prev.map(s => s.id === activeId ? {
         ...s,
@@ -151,10 +149,9 @@ export const ChatPage: React.FC = () => {
       } : s));
     }
 
+    // تنظيف الواجهة فوراً للسرعة
     const currentPrompt = finalInput;
     const currentImg = attachedImage;
-
-    // مسح المدخلات فوراً لضمان واجهة سريعة
     setInput('');
     setAttachedImage(null);
     if (isListening) toggleListening();
@@ -165,13 +162,13 @@ export const ChatPage: React.FC = () => {
       const aiResponse = await generateText(currentPrompt || "حلل الصورة بدقة", { 
         useSearch: true,
         image: currentImg || undefined,
-        systemInstruction: `You are Eyad AI, the most precise and fast engineer.
-        Target Language: ${currentLang}.
-        BEHAVIOR:
-        1. Accuracy: Use Google Search for all facts. NEVER hallucinate.
-        2. Speed: Respond as fast as a real human. No fillers.
-        3. Dialect: Match the user's dialect (Egyptian, Saudi, etc.) perfectly.
-        4. Detail: Provide a complete and accurate answer in 2-4 short, high-impact paragraphs.`
+        systemInstruction: `You are Eyad AI, a multi-lingual master assistant.
+        Language Preference: ${currentLang}.
+        STRICT RULES:
+        1. SPEED: Reply in less than 2 seconds.
+        2. DIALECT: Always match the user's dialect (Egyptian, Gulf, etc.).
+        3. ACCURACY: Use Google Search for facts. If search is slow, use internal knowledge to maintain speed.
+        4. NO FILLERS: Don't say "Searching..." - just give the facts.`
       });
       
       const modelMsg: Message = {
@@ -186,18 +183,18 @@ export const ChatPage: React.FC = () => {
         ...s, messages: [...s.messages, modelMsg], lastTimestamp: Date.now() 
       } : s));
     } catch (err: any) {
+      // إظهار رسالة خطأ ذكية فقط عند الفشل الكامل
       setError("إياد مشغول شوية، حاول كمان ثانية.");
-      // إعادة النص للمدخلات في حالة الخطأ لسهولة المحاولة مرة أخرى
       setInput(currentPrompt);
       setAttachedImage(currentImg);
     } finally {
       setIsTyping(false);
-      isSendingRef.current = false;
+      isProcessingRef.current = false;
     }
   };
 
   const createNewSession = () => {
-    if (isSendingRef.current) return;
+    if (isProcessingRef.current) return;
     setCurrentSessionId(null);
     setInput('');
     setAttachedImage(null);

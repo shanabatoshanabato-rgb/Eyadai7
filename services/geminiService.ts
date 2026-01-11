@@ -4,9 +4,7 @@ import { MODELS } from "../constants";
 
 const getApiKey = () => {
   const key = process.env.API_KEY;
-  if (!key || key === 'undefined' || key === 'null' || key === '') {
-    return null;
-  }
+  if (!key || key === 'undefined' || key === 'null' || key === '') return null;
   return key;
 };
 
@@ -30,27 +28,27 @@ export interface AIResponse {
 
 export const extractJson = (text: string) => {
   try {
-    let cleaned = text.trim();
-    cleaned = cleaned.replace(/```json/gi, '').replace(/```/g, '').trim();
+    let cleaned = text.trim().replace(/```json/gi, '').replace(/```/g, '').trim();
     const start = cleaned.indexOf('{') !== -1 ? cleaned.indexOf('{') : cleaned.indexOf('[');
     const end = cleaned.lastIndexOf('}') !== -1 ? cleaned.lastIndexOf('}') : cleaned.lastIndexOf(']');
-    if (start !== -1 && end !== -1) {
-      return JSON.parse(cleaned.substring(start, end + 1));
-    }
+    if (start !== -1 && end !== -1) return JSON.parse(cleaned.substring(start, end + 1));
     return JSON.parse(cleaned);
   } catch (e) {
     throw new Error("FAILED_TO_PARSE_JSON");
   }
 };
 
+/**
+ * دالة توليد النصوص المطورة: تضمن السرعة القصوى مع حماية ضد أخطاء 429 أو تعليق البحث
+ */
 export const generateText = async (prompt: string, options?: GenerateOptions): Promise<AIResponse> => {
+  const ai = getAI();
   const modelName = 'gemini-3-flash-preview';
   
-  // فحص الكلمات البسيطة لزيادة السرعة (هلا، مرحبا، الخ)
-  const simplePrompts = /^(هلا|مرحبا|سلام|كيفك|شكرا|تمام|hi|hello|hey|thanks)$/i.test(prompt.trim());
+  // الكلمات التي تتطلب سرعة خارقة وبدون بحث
+  const isSimple = /^(هلا|مرحبا|سلام|كيفك|اخبارك|مين انت|شكرا|تمام|اوكي|ماشي|hi|hello|hey|thanks|ok|who are you)$/i.test(prompt.trim());
   
-  try {
-    const ai = getAI();
+  const executeRequest = async (withSearch: boolean): Promise<AIResponse> => {
     const parts: any[] = [{ text: prompt }];
     if (options?.image) {
       parts.push({ inlineData: { data: options.image.data, mimeType: options.image.mimeType } });
@@ -58,16 +56,12 @@ export const generateText = async (prompt: string, options?: GenerateOptions): P
 
     const config: any = {
       systemInstruction: options?.systemInstruction || "You are Eyad AI, a high-precision and extremely fast assistant.",
-      temperature: 0.1, // لضمان أقصى دقة
-      topP: 0.95,
+      temperature: 0.1,
+      topP: 0.9,
     };
 
     if (options?.responseMimeType === "application/json") config.responseMimeType = "application/json";
-
-    // تفعيل البحث فقط إذا لم تكن كلمة بسيطة
-    if (options?.useSearch && !simplePrompts) {
-      config.tools = [{ googleSearch: {} }];
-    }
+    if (withSearch) config.tools = [{ googleSearch: {} }];
 
     const response = await ai.models.generateContent({
       model: modelName,
@@ -86,10 +80,15 @@ export const generateText = async (prompt: string, options?: GenerateOptions): P
     }
 
     return { text: response.text, sources };
+  };
+
+  try {
+    // المحاولة الأولى: مع البحث إذا طُلب ولم تكن الكلمة بسيطة
+    return await executeRequest(options?.useSearch && !isSimple ? true : false);
   } catch (error: any) {
-    // محاولة أخيرة سريعة بدون بحث في حال حدوث أي خطأ (Fallback)
-    if (options?.useSearch) {
-      return generateText(prompt, { ...options, useSearch: false });
+    // إذا حدث أي خطأ (ضغط، 429، فشل بحث)، جرب فوراً بدون بحث كـ Fallback
+    if (options?.useSearch && !isSimple) {
+      return await executeRequest(false);
     }
     throw error;
   }
