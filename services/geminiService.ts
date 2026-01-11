@@ -14,10 +14,6 @@ export const getAI = () => {
   return new GoogleGenAI({ apiKey });
 };
 
-/**
- * Interface for generation options.
- * Added responseMimeType to allow JSON mode configuration as required by some pages.
- */
 interface GenerateOptions {
   systemInstruction?: string;
   image?: { data: string; mimeType: string };
@@ -31,20 +27,17 @@ export interface AIResponse {
 }
 
 /**
- * وظيفة البث المباشر (Streaming) للحصول على أسرع استجابة ممكنة
+ * وظيفة البث المباشر (Streaming) للحصول على أسرع استجابة ممكنة مع استخراج المصادر
  */
 export async function* generateTextStream(prompt: string, options?: GenerateOptions) {
   const ai = getAI();
   const modelName = 'gemini-3-flash-preview';
-  
-  const isSimple = /^(هلا|مرحبا|سلام|كيفك|اخبارك|مين انت|شكرا|تمام|اوكي|ماشي|hi|hello|hey|thanks|ok|who are you)$/i.test(prompt.trim());
   
   const parts: any[] = [{ text: prompt }];
   if (options?.image) {
     parts.push({ inlineData: { data: options.image.data, mimeType: options.image.mimeType } });
   }
 
-  // Pass responseMimeType if provided in options
   const config: any = {
     systemInstruction: options?.systemInstruction || "You are Eyad AI, a high-speed, accurate engineer.",
     temperature: 0.1,
@@ -52,8 +45,7 @@ export async function* generateTextStream(prompt: string, options?: GenerateOpti
     responseMimeType: options?.responseMimeType,
   };
 
-  // تفعيل البحث فقط للأسئلة التي تحتاج معلومة خارجية
-  if (options?.useSearch && !isSimple) {
+  if (options?.useSearch) {
     config.tools = [{ googleSearch: {} }];
   }
 
@@ -71,7 +63,7 @@ export async function* generateTextStream(prompt: string, options?: GenerateOpti
       const text = chunk.text || "";
       fullText += text;
       
-      // استخراج المصادر إذا وجدت في أي جزء من البث
+      // استخراج المصادر من Grounding Metadata
       const groundingMetadata = (chunk as any).candidates?.[0]?.groundingMetadata;
       if (groundingMetadata?.groundingChunks) {
         groundingMetadata.groundingChunks.forEach((c: any) => {
@@ -87,28 +79,13 @@ export async function* generateTextStream(prompt: string, options?: GenerateOpti
 
     yield { text: "", fullText, sources, done: true };
   } catch (error: any) {
-    // Fallback في حالة فشل البحث أو الضغط
-    if (options?.useSearch) {
-      const fallback = await ai.models.generateContentStream({
-        model: modelName,
-        contents: { parts },
-        config: { ...config, tools: [] }
-      });
-      let ft = "";
-      for await (const c of fallback) {
-        ft += c.text;
-        yield { text: c.text, fullText: ft, sources: [], done: false };
-      }
-      yield { text: "", fullText: ft, sources: [], done: true };
-    } else {
-      throw error;
-    }
+    console.error("Gemini Stream Error:", error);
+    throw error;
   }
 }
 
 /**
- * الدالة القديمة للإبقاء على التوافق مع صفحات أخرى (مثل Homework)
- * Updated to accept and forward responseMimeType to the Gemini API config.
+ * الدالة القديمة للإبقاء على التوافق مع صفحات أخرى
  */
 export const generateText = async (prompt: string, options?: GenerateOptions): Promise<AIResponse> => {
   const ai = getAI();
@@ -127,9 +104,12 @@ export const generateText = async (prompt: string, options?: GenerateOptions): P
   });
 
   const sources: any[] = [];
-  response.candidates?.[0]?.groundingMetadata?.groundingChunks?.forEach((c: any) => {
-    if (c.web) sources.push({ title: c.web.title, uri: c.web.uri });
-  });
+  const groundingChunks = (response as any).candidates?.[0]?.groundingMetadata?.groundingChunks;
+  if (groundingChunks) {
+    groundingChunks.forEach((c: any) => {
+      if (c.web) sources.push({ title: c.web.title || c.web.uri, uri: c.web.uri });
+    });
+  }
 
   return { text: response.text || "", sources };
 };

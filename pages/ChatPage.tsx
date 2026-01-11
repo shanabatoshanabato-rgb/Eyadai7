@@ -1,376 +1,401 @@
 
-import React, { useState, useRef, useEffect, useMemo } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { 
   Send, 
   Trash2, 
-  MessageSquare, 
   Sparkles, 
-  AlertCircle,
   Loader2,
-  Volume2,
-  VolumeX,
-  Paperclip,
-  X,
   Globe,
   ExternalLink,
-  RefreshCcw,
   Plus,
   PanelLeftClose,
   PanelLeftOpen,
   History,
-  Edit2,
   Mic,
-  MicOff
+  MicOff,
+  Image as ImageIcon,
+  X,
+  AlertCircle,
+  ChevronRight
 } from 'lucide-react';
-import { generateTextStream, generateSpeech, decode, decodeAudioData } from '../services/geminiService';
+import { generateTextStream } from '../services/geminiService';
 import { Message, ChatSession, Language } from '../types';
-import { VOICE_MAP, DEFAULT_SETTINGS } from '../constants';
 import { useTranslation } from '../translations';
 
 export const ChatPage: React.FC = () => {
   const t = useTranslation();
+  
+  // --- State ---
   const [sessions, setSessions] = useState<ChatSession[]>(() => {
-    const saved = localStorage.getItem('eyad-ai-sessions');
+    const saved = localStorage.getItem('eyad-ai-v4-sessions');
     return saved ? JSON.parse(saved) : [];
   });
   
-  const [currentSessionId, setCurrentSessionId] = useState<string | null>(() => {
-    return localStorage.getItem('eyad-ai-active-session') || null;
+  const [activeSessionId, setActiveSessionId] = useState<string | null>(() => {
+    return localStorage.getItem('eyad-ai-v4-active-id');
   });
 
   const [input, setInput] = useState('');
   const [isTyping, setIsTyping] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [isPlaying, setIsPlaying] = useState<string | null>(null);
   const [isListening, setIsListening] = useState(false);
   const [attachedImage, setAttachedImage] = useState<{data: string, mimeType: string} | null>(null);
   const [isSidebarOpen, setIsSidebarOpen] = useState(window.innerWidth > 1024);
-  const [editingSessionId, setEditingSessionId] = useState<string | null>(null);
-  const [editTitle, setEditTitle] = useState('');
-  
-  const [streamingMessage, setStreamingMessage] = useState<string>('');
+  const [streamingText, setStreamingText] = useState('');
   const [streamingSources, setStreamingSources] = useState<{title: string, uri: string}[]>([]);
+  const [error, setError] = useState<string | null>(null);
 
+  // --- Refs ---
   const scrollRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const audioContextRef = useRef<AudioContext | null>(null);
   const recognitionRef = useRef<any>(null);
-  const isProcessingRef = useRef(false);
+  const isSending = useRef(false);
 
-  const currentSession = useMemo(() => 
-    sessions.find(s => s.id === currentSessionId), 
-    [sessions, currentSessionId]
-  );
-
+  // --- Helpers ---
+  const currentSession = sessions.find(s => s.id === activeSessionId);
   const messages = currentSession?.messages || [];
 
+  // Sync to Storage
   useEffect(() => {
-    localStorage.setItem('eyad-ai-sessions', JSON.stringify(sessions));
+    localStorage.setItem('eyad-ai-v4-sessions', JSON.stringify(sessions));
   }, [sessions]);
 
   useEffect(() => {
-    if (currentSessionId) {
-      localStorage.setItem('eyad-ai-active-session', currentSessionId);
-    } else {
-      localStorage.removeItem('eyad-ai-active-session');
-    }
-  }, [currentSessionId]);
+    if (activeSessionId) localStorage.setItem('eyad-ai-v4-active-id', activeSessionId);
+    else localStorage.removeItem('eyad-ai-v4-active-id');
+  }, [activeSessionId]);
 
   useEffect(() => {
     scrollRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages, isTyping, streamingMessage]);
+  }, [messages, streamingText, isTyping]);
 
+  // Mic Logic
   useEffect(() => {
     const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
     if (SpeechRecognition) {
-      const recognition = new SpeechRecognition();
-      recognition.continuous = true;
-      recognition.interimResults = true;
-      recognition.lang = 'ar-SA';
-      recognition.onresult = (event: any) => {
-        const transcript = Array.from(event.results).map((result: any) => result[0]).map((result: any) => result.transcript).join('');
-        setInput(transcript);
-      };
-      recognition.onerror = () => setIsListening(false);
-      recognition.onend = () => setIsListening(false);
-      recognitionRef.current = recognition;
+      const rec = new SpeechRecognition();
+      rec.continuous = false;
+      rec.lang = 'ar-SA';
+      rec.onresult = (e: any) => setInput(prev => prev + ' ' + e.results[0][0].transcript);
+      rec.onend = () => setIsListening(false);
+      recognitionRef.current = rec;
     }
   }, []);
 
-  const toggleListening = () => {
-    if (isListening) {
-      recognitionRef.current?.stop();
-      setIsListening(false);
-    } else {
-      setError(null);
-      try {
-        recognitionRef.current?.start();
-        setIsListening(true);
-      } catch (e) {
-        setError("Microphone error.");
-      }
-    }
-  };
+  // --- Actions ---
+  const handleSend = async (forcedPrompt?: string) => {
+    const promptText = (forcedPrompt || input).trim();
+    if (isSending.current || (!promptText && !attachedImage)) return;
 
-  const handleSend = async (retryInput?: string) => {
-    const finalInput = (retryInput || input).trim();
-    if (isProcessingRef.current || (!finalInput && !attachedImage)) return;
-    
-    isProcessingRef.current = true;
+    isSending.current = true;
     setError(null);
     setIsTyping(true);
-    setStreamingMessage('');
+    setStreamingText('');
     setStreamingSources([]);
+    if (window.innerWidth < 1024) setIsSidebarOpen(false); // Close sidebar on send if mobile
 
-    const userMsg: Message = { 
-      id: "u_" + Date.now(), 
-      role: 'user', 
-      text: finalInput || t('imageAttached'), 
-      timestamp: Date.now() 
+    const userMsg: Message = {
+      id: Date.now().toString(),
+      role: 'user',
+      text: promptText || "تحليل الصورة",
+      timestamp: Date.now()
     };
 
-    let activeId = currentSessionId;
-
-    if (!activeId) {
-      activeId = "s_" + Date.now();
+    let sId = activeSessionId;
+    if (!sId) {
+      sId = "s_" + Date.now();
       const newSession: ChatSession = {
-        id: activeId,
-        title: finalInput.substring(0, 30) || t('newChat'),
+        id: sId,
+        title: promptText.substring(0, 30) || "محادثة سريعة",
         messages: [userMsg],
         lastTimestamp: Date.now()
       };
       setSessions(prev => [newSession, ...prev]);
-      setCurrentSessionId(activeId);
+      setActiveSessionId(sId);
     } else {
-      setSessions(prev => prev.map(s => s.id === activeId ? {
-        ...s,
-        messages: [...s.messages, userMsg],
-        lastTimestamp: Date.now()
+      setSessions(prev => prev.map(s => s.id === sId ? {
+        ...s, messages: [...s.messages, userMsg], lastTimestamp: Date.now()
       } : s));
     }
 
-    const currentPrompt = finalInput;
-    const currentImg = attachedImage;
+    const backupInput = promptText;
+    const backupImg = attachedImage;
     setInput('');
     setAttachedImage(null);
-    if (isListening) toggleListening();
 
     try {
-      const currentLang = (localStorage.getItem('eyad-ai-lang') as Language) || Language.AR;
-      // الحصول على التاريخ اللحظي الدقيق
-      const now = new Date();
-      const today = now.toLocaleDateString('ar-EG', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
-      
-      const stream = generateTextStream(currentPrompt || "Analyze this", {
+      const today = new Date().toLocaleDateString('ar-EG', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+      const stream = generateTextStream(promptText, {
         useSearch: true,
-        image: currentImg || undefined,
-        systemInstruction: `You are Eyad AI, a master engineer connected to the live web.
-        CURRENT SYSTEM DATE: ${today}.
-        CRITICAL CONTEXT: The current year is 2026.
-        SEARCH RULE: You MUST use Google Search for any query about facts, news, current events, or dates to provide 100% accurate info from 2026.
-        LANGUAGE: Respond in ${currentLang} matching the user's dialect perfectly.
-        BEHAVIOR: Be concise, fast, and extremely accurate. Start streaming the answer immediately.`
+        image: backupImg || undefined,
+        systemInstruction: `You are Eyad AI, a real-time engineer for the year 2026.
+        MANDATORY: Always use Google Search for every query to be 100% accurate for 2026 events.
+        BEHAVIOR: Respond INSTANTLY. Match the user's dialect (Egyptian, Gulf, English, etc.) perfectly. 
+        STYLE: No long intros. Just the facts. High-speed response is priority.`
       });
 
-      let finalFullText = "";
-      let finalSources: any[] = [];
+      let fullText = "";
+      let sources: any[] = [];
 
       for await (const chunk of stream) {
         setIsTyping(false);
-        setStreamingMessage(chunk.fullText);
-        setStreamingSources(chunk.sources);
-        finalFullText = chunk.fullText;
-        finalSources = chunk.sources;
+        fullText = chunk.fullText;
+        sources = chunk.sources;
+        setStreamingText(fullText);
+        setStreamingSources(sources);
       }
-      
+
       const modelMsg: Message = {
         id: "m_" + Date.now(),
         role: 'model',
-        text: finalFullText,
+        text: fullText,
         timestamp: Date.now(),
-        sources: finalSources
+        sources: sources
       };
 
-      setSessions(prev => prev.map(s => s.id === activeId ? { 
-        ...s, messages: [...s.messages, modelMsg], lastTimestamp: Date.now() 
+      setSessions(prev => prev.map(s => s.id === sId ? {
+        ...s, messages: [...s.messages, modelMsg], lastTimestamp: Date.now()
       } : s));
-      setStreamingMessage('');
+      setStreamingText('');
       setStreamingSources([]);
-
-    } catch (err: any) {
-      setError("إياد مشغول شوية، حاول كمان ثانية.");
-      setInput(currentPrompt);
-      setAttachedImage(currentImg);
+    } catch (err) {
+      setError("إياد واجه مشكلة بسيطة في الشبكة. جرب تاني.");
+      setInput(backupInput);
     } finally {
       setIsTyping(false);
-      isProcessingRef.current = false;
+      isSending.current = false;
     }
   };
 
-  const createNewSession = () => {
-    if (isProcessingRef.current) return;
-    setCurrentSessionId(null);
+  const startNewChat = () => {
+    setActiveSessionId(null);
     setInput('');
     setAttachedImage(null);
     setError(null);
-    if (window.innerWidth < 1024) setIsSidebarOpen(false);
+    if (window.innerWidth < 1024) setIsSidebarOpen(false); // Close sidebar after clicking new chat on mobile
   };
 
-  const deleteSession = (id: string, e: React.MouseEvent) => { 
-    e.stopPropagation(); 
-    setSessions(prev => prev.filter(s => s.id !== id)); 
-    if (currentSessionId === id) setCurrentSessionId(null); 
+  const clearAllHistory = () => {
+    if (window.confirm("حذف السجل بالكامل؟ مش هتعرف ترجعهم تاني.")) {
+      setSessions([]);
+      setActiveSessionId(null);
+      localStorage.removeItem('eyad-ai-v4-sessions');
+      localStorage.removeItem('eyad-ai-v4-active-id');
+      setStreamingText('');
+      setStreamingSources([]);
+      if (window.innerWidth < 1024) setIsSidebarOpen(false);
+    }
   };
 
-  const deleteMessage = (msgId: string) => { 
-    if (!currentSessionId) return; 
-    setSessions(prev => prev.map(s => s.id === currentSessionId ? { ...s, messages: s.messages.filter(m => m.id !== msgId) } : s)); 
-  };
-
-  const startEditing = (id: string, title: string, e: React.MouseEvent) => { 
-    e.stopPropagation(); 
-    setEditingSessionId(id); 
-    setEditTitle(title); 
-  };
-
-  const saveRenamedTitle = (id: string) => { 
-    if (editTitle.trim()) setSessions(prev => prev.map(s => s.id === id ? { ...s, title: editTitle.trim() } : s)); 
-    setEditingSessionId(null); 
-  };
-
-  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => { 
-    const file = e.target.files?.[0]; 
-    if (file) { 
-      const reader = new FileReader(); 
-      reader.onload = () => { 
-        const base64 = (reader.result as string).split(',')[1]; 
-        setAttachedImage({ data: base64, mimeType: file.type }); 
-      }; 
-      reader.readAsDataURL(file); 
-    } 
-  };
-
-  const speakMessage = async (text: string, id: string) => { 
-    if (isPlaying === id) return; 
-    setIsPlaying(id); 
-    try { 
-      const voice = localStorage.getItem('eyad-ai-voice') || DEFAULT_SETTINGS.voiceName; 
-      const apiVoice = VOICE_MAP[voice] || 'Zephyr'; 
-      const base64Audio = await generateSpeech(text, apiVoice); 
-      if (base64Audio) { 
-        if (!audioContextRef.current) audioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 24000 }); 
-        const ctx = audioContextRef.current; 
-        const buffer = await decodeAudioData(decode(base64Audio), ctx, 24000, 1); 
-        const source = ctx.createBufferSource(); 
-        source.buffer = buffer; 
-        source.connect(ctx.destination); 
-        source.onended = () => setIsPlaying(null); 
-        source.start(); 
-      } else setIsPlaying(null); 
-    } catch (e) { setIsPlaying(null); } 
+  const selectSession = (id: string) => {
+    setActiveSessionId(id);
+    if (window.innerWidth < 1024) setIsSidebarOpen(false); // Auto-close sidebar on mobile
   };
 
   return (
     <div className="flex h-[calc(100vh-64px)] overflow-hidden bg-slate-50 dark:bg-slate-950">
-      {isSidebarOpen && window.innerWidth < 1024 && <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-40 lg:hidden" onClick={() => setIsSidebarOpen(false)} />}
-      <aside className={`fixed lg:relative z-50 lg:z-0 h-full bg-white dark:bg-slate-900 border-r border-slate-200 dark:border-slate-800 transition-all duration-300 ease-in-out ${isSidebarOpen ? 'w-80 opacity-100 translate-x-0' : 'w-0 opacity-0 -translate-x-full lg:translate-x-0'}`}>
-        <div className="flex flex-col h-full w-80 overflow-hidden">
-          <div className="p-5 border-b border-slate-200 dark:border-slate-800">
-            <button onClick={createNewSession} className="w-full py-3.5 bg-blue-600 hover:bg-blue-700 text-white rounded-2xl font-black flex items-center justify-center gap-2 shadow-lg active:scale-95 transition-all"><Plus className="w-5 h-5" /> {t('newChat')}</button>
+      {/* Sidebar Overlay (Mobile) */}
+      {isSidebarOpen && window.innerWidth < 1024 && (
+        <div 
+          className="fixed inset-0 bg-black/60 backdrop-blur-sm z-40 lg:hidden transition-opacity duration-300"
+          onClick={() => setIsSidebarOpen(false)}
+        />
+      )}
+
+      {/* Sidebar Taskbar */}
+      <aside className={`fixed lg:relative z-50 h-full bg-white dark:bg-slate-900 border-r border-slate-200 dark:border-slate-800 transition-all duration-300 ease-in-out ${isSidebarOpen ? 'w-80 translate-x-0' : 'w-0 -translate-x-full lg:translate-x-0 lg:w-0 overflow-hidden'}`}>
+        <div className="flex flex-col h-full w-80">
+          <div className="p-4 flex items-center justify-between border-b border-slate-100 dark:border-slate-800">
+            <button onClick={startNewChat} className="flex-grow py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-bold flex items-center justify-center gap-2 shadow-lg shadow-blue-500/20 active:scale-95 transition-all">
+              <Plus className="w-5 h-5" /> {t('newChat')}
+            </button>
+            <button onClick={() => setIsSidebarOpen(false)} className="lg:hidden p-3 text-slate-400 hover:text-slate-600">
+              <X className="w-6 h-6" />
+            </button>
           </div>
-          <div className="flex-grow overflow-y-auto p-3 space-y-1">
-            <div className="px-3 py-3 text-[10px] font-black uppercase tracking-widest text-slate-400 flex items-center gap-2"><History className="w-4 h-4" /> {t('chatHistory')}</div>
-            {sessions.map(s => (
-              <div key={s.id} onClick={() => { if (editingSessionId === s.id) return; setCurrentSessionId(s.id); if (window.innerWidth < 1024) setIsSidebarOpen(false); }} className={`group flex items-center justify-between p-4 rounded-2xl cursor-pointer transition-all border ${currentSessionId === s.id ? 'bg-blue-50 dark:bg-blue-900/20 border-blue-100 dark:border-blue-900/30 text-blue-600 dark:text-blue-400' : 'bg-transparent border-transparent hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-400'}`}>
-                <div className="flex items-center gap-3 truncate flex-grow"><MessageSquare className={`w-4.5 h-4.5 flex-shrink-0 ${currentSessionId === s.id ? 'text-blue-500' : 'text-slate-400'}`} />{editingSessionId === s.id ? <input autoFocus className="bg-white dark:bg-slate-800 border border-blue-500 rounded px-2 py-0.5 w-full outline-none text-sm font-bold text-slate-900 dark:text-white" value={editTitle} onChange={(e) => setEditTitle(e.target.value)} onBlur={() => saveRenamedTitle(s.id)} onKeyDown={(e) => e.key === 'Enter' && saveRenamedTitle(s.id)} onClick={(e) => e.stopPropagation()} /> : <span className="truncate text-sm font-bold tracking-tight">{s.title}</span>}</div>
-                {editingSessionId !== s.id && <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-all"><button onClick={(e) => startEditing(s.id, s.title, e)} className="p-1.5 hover:bg-blue-100 dark:hover:bg-blue-900/30 text-slate-400 hover:text-blue-500 rounded-lg transition-all"><Edit2 className="w-4 h-4" /></button><button onClick={(e) => deleteSession(s.id, e)} className="p-1.5 hover:bg-red-50 dark:hover:bg-red-900/30 text-slate-400 hover:text-red-500 rounded-lg transition-all"><Trash2 className="w-4 h-4" /></button></div>}
-              </div>
-            ))}
+
+          <div className="flex-grow overflow-y-auto p-2 space-y-1 custom-scrollbar">
+            <div className="px-4 py-3 flex items-center gap-2 text-[10px] font-black uppercase text-slate-400 tracking-widest">
+              <History className="w-3.5 h-3.5" /> {t('chatHistory')}
+            </div>
+            {sessions.length === 0 ? (
+              <div className="p-8 text-center text-slate-400 text-xs font-medium italic">سجلك فاضي يا بطل</div>
+            ) : (
+              sessions.map(s => (
+                <div key={s.id} className="group relative">
+                  <button 
+                    onClick={() => selectSession(s.id)}
+                    className={`w-full text-right p-4 rounded-xl transition-all border flex items-center justify-between ${activeSessionId === s.id ? 'bg-blue-50 dark:bg-blue-900/30 border-blue-100 dark:border-blue-800 text-blue-600' : 'hover:bg-slate-50 dark:hover:bg-slate-800 border-transparent text-slate-600 dark:text-slate-400'}`}
+                  >
+                    <span className="truncate text-sm font-bold flex-grow">{s.title}</span>
+                    <ChevronRight className={`w-4 h-4 transition-transform ${activeSessionId === s.id ? 'rotate-90 text-blue-500' : 'text-slate-300 opacity-0 group-hover:opacity-100'}`} />
+                  </button>
+                  <button 
+                    onClick={(e) => { e.stopPropagation(); setSessions(prev => prev.filter(x => x.id !== s.id)); if(activeSessionId === s.id) setActiveSessionId(null); }}
+                    className="absolute left-2 top-1/2 -translate-y-1/2 p-2 text-slate-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                </div>
+              ))
+            )}
+          </div>
+
+          <div className="p-4 border-t border-slate-100 dark:border-slate-800">
+            <button onClick={clearAllHistory} className="w-full py-3 text-red-500 hover:bg-red-50 dark:hover:bg-red-900/10 rounded-xl text-xs font-black uppercase tracking-widest transition-all flex items-center justify-center gap-2 border border-transparent hover:border-red-100">
+              <Trash2 className="w-4 h-4" /> {t('clearHistory')}
+            </button>
           </div>
         </div>
       </aside>
 
-      <div className="flex-grow flex flex-col relative overflow-hidden w-full">
-        <header className="px-6 py-4 flex items-center justify-between bg-white dark:bg-slate-950 border-b border-slate-200 dark:border-slate-800 z-10">
-          <div className="flex items-center gap-4"><button onClick={() => setIsSidebarOpen(!isSidebarOpen)} className="p-2.5 text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-2xl transition-colors">{isSidebarOpen ? <PanelLeftClose className="w-6 h-6" /> : <PanelLeftOpen className="w-6 h-6" />}</button>
-          <div className="flex items-center gap-3"><div className="w-10 h-10 bg-blue-600 rounded-xl flex items-center justify-center text-white shadow-lg"><Sparkles className="w-5 h-5" /></div><div className="hidden sm:block"><h2 className="font-black text-slate-900 dark:text-white tracking-tight truncate max-w-[200px]">{currentSession?.title || t('chat')}</h2><p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest flex items-center gap-1"><Globe className="w-3 h-3 text-green-500" /> Grounded Search (2026)</p></div></div></div>
-          <button onClick={() => { if(confirm(t('clearHistory') + "?")) { setSessions([]); setCurrentSessionId(null); setError(null); localStorage.removeItem('eyad-ai-sessions'); } }} className="p-2 text-slate-400 hover:text-red-500 transition-colors"><Trash2 className="w-5 h-5" /></button>
+      {/* Main Chat Area */}
+      <div className="flex-grow flex flex-col relative w-full">
+        {/* Header */}
+        <header className="h-16 px-6 flex items-center justify-between bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 z-10">
+          <div className="flex items-center gap-4">
+            <button onClick={() => setIsSidebarOpen(!isSidebarOpen)} className="p-2 text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl">
+              {isSidebarOpen ? <PanelLeftClose className="w-5 h-5" /> : <PanelLeftOpen className="w-5 h-5" />}
+            </button>
+            <div className="flex items-center gap-2">
+              <div className="w-2.5 h-2.5 bg-blue-500 rounded-full animate-pulse shadow-[0_0_8px_rgba(59,130,246,0.5)]" />
+              <span className="font-black text-slate-900 dark:text-white uppercase tracking-tighter">EYAD ENGINE 2026</span>
+            </div>
+          </div>
+          <div className="hidden sm:flex items-center gap-2 text-[10px] font-black uppercase text-slate-400 tracking-widest">
+            <Globe className="w-4 h-4 text-blue-500" /> Active Search (2026)
+          </div>
         </header>
 
-        <div className="flex-grow overflow-y-auto p-4 md:p-8 space-y-6">
-          {messages.length === 0 && !error && !streamingMessage && <div className="h-full flex flex-col items-center justify-center text-center max-w-sm mx-auto animate-in fade-in duration-700"><div className="relative mb-6"><div className="absolute inset-0 bg-blue-500 blur-2xl opacity-20 animate-pulse rounded-full" /><Sparkles className="w-16 h-16 text-blue-500 relative" /></div><h1 className="text-3xl font-black mb-3 dark:text-white leading-tight">{t('chatWelcomeTitle')}</h1><p className="text-slate-500 dark:text-slate-400 font-medium leading-relaxed">{t('chatWelcomeDesc')}</p></div>}
-          
+        {/* Message Flow */}
+        <div className="flex-grow overflow-y-auto p-4 md:p-8 space-y-8 custom-scrollbar bg-slate-50/50 dark:bg-slate-950/50">
+          {messages.length === 0 && !streamingText && (
+            <div className="h-full flex flex-col items-center justify-center text-center max-w-lg mx-auto space-y-8 animate-in fade-in duration-500">
+              <div className="relative">
+                <div className="absolute inset-0 bg-blue-500 blur-[80px] opacity-10 animate-pulse" />
+                <div className="relative w-20 h-20 bg-blue-600 rounded-3xl flex items-center justify-center shadow-2xl rotate-3">
+                  <Sparkles className="w-10 h-10 text-white fill-white/20" />
+                </div>
+              </div>
+              <div className="space-y-3">
+                <h2 className="text-3xl font-black text-slate-900 dark:text-white tracking-tight">إياد ٢٠٢٦ جاهز!</h2>
+                <p className="text-slate-500 dark:text-slate-400 font-medium text-lg leading-relaxed px-4">موصول بالإنترنت لحظة بلحظة. اسأل عن أي حاجة وهجيب لك الإجابة بالدليل.</p>
+              </div>
+              <div className="grid grid-cols-2 gap-3 w-full px-4">
+                {["أخبار التكنولوجيا اليوم", "سعر الذهب الآن", "أهم تريندات ٢٠٢٦", "حل مسألة معقدة"].map(q => (
+                  <button key={q} onClick={() => handleSend(q)} className="p-4 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl text-[13px] font-bold hover:border-blue-500 hover:shadow-md transition-all text-slate-700 dark:text-slate-300">{q}</button>
+                ))}
+              </div>
+            </div>
+          )}
+
           {messages.map((m) => (
             <div key={m.id} className={`flex flex-col ${m.role === 'user' ? 'items-end' : 'items-start'} animate-in fade-in slide-in-from-bottom-2`}>
-              <div className={`relative group max-w-[90%] md:max-w-[85%] p-4 rounded-3xl shadow-sm ${m.role === 'user' ? 'bg-blue-600 text-white rounded-tr-none' : 'bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-slate-100 rounded-tl-none'}`}>
-                <button onClick={() => deleteMessage(m.id)} className={`absolute -top-2 ${m.role === 'user' ? '-left-2' : '-right-2'} p-1.5 bg-red-500 text-white rounded-full opacity-0 group-hover:opacity-100 transition-all hover:bg-red-600 shadow-lg z-10`}><Trash2 className="w-3.5 h-3.5" /></button>
-                <p className="whitespace-pre-wrap leading-relaxed text-sm md:text-base font-medium">{m.text}</p>
-                {m.sources && m.sources.length > 0 && <div className="mt-4 pt-3 border-t border-slate-100 dark:border-slate-800 space-y-2"><p className="text-[10px] font-black uppercase tracking-widest text-slate-400 flex items-center gap-1"><Globe className="w-3 h-3" /> Sources</p><div className="flex flex-wrap gap-2">{m.sources.map((src, idx) => (<a key={idx} href={src.uri} target="_blank" rel="noreferrer" className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-50 dark:bg-slate-800 rounded-lg text-xs font-bold text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-colors border border-transparent hover:border-blue-100 dark:hover:border-blue-900/50"><ExternalLink className="w-3 h-3" /><span className="truncate max-w-[150px]">{src.title}</span></a>))}</div></div>}
-                {m.role === 'model' && <button onClick={() => speakMessage(m.text, m.id)} className={`mt-3 flex items-center gap-2 px-3 py-1.5 bg-slate-100 dark:bg-slate-800 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all ${isPlaying === m.id ? 'text-blue-500 bg-blue-50 dark:bg-blue-900/30' : 'text-slate-500 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/20'}`}>{isPlaying === m.id ? <VolumeX className="w-4 h-4 animate-pulse" /> : <Volume2 className="w-4 h-4" />}{isPlaying === m.id ? 'Speaking...' : 'Listen'}</button>}
-              </div>
-              <span className="text-[9px] font-bold text-slate-400 mt-1 uppercase tracking-widest opacity-60">{new Date(m.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
-            </div>
-          ))}
-
-          {streamingMessage && (
-            <div className="flex flex-col items-start animate-in fade-in slide-in-from-bottom-2">
-              <div className="relative max-w-[90%] md:max-w-[85%] p-4 rounded-3xl shadow-sm bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-slate-100 rounded-tl-none">
-                <p className="whitespace-pre-wrap leading-relaxed text-sm md:text-base font-medium">{streamingMessage}</p>
-                {streamingSources.length > 0 && (
-                  <div className="mt-4 pt-3 border-t border-slate-100 dark:border-slate-800 space-y-2 animate-in fade-in">
-                    <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 flex items-center gap-1"><Globe className="w-3 h-3" /> Live Search Results</p>
+              <div className={`max-w-[90%] md:max-w-[80%] p-5 rounded-[2rem] shadow-sm ${m.role === 'user' ? 'bg-blue-600 text-white rounded-tr-none' : 'bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-slate-100 rounded-tl-none'}`}>
+                <p className="whitespace-pre-wrap leading-relaxed font-medium text-[15px] md:text-base tracking-tight">{m.text}</p>
+                {m.sources && m.sources.length > 0 && (
+                  <div className="mt-5 pt-4 border-t border-slate-100 dark:border-slate-800 space-y-3">
+                    <p className="text-[10px] font-black uppercase text-slate-400 flex items-center gap-1.5"><Globe className="w-3.5 h-3.5" /> مراجع البحث</p>
                     <div className="flex flex-wrap gap-2">
-                      {streamingSources.map((src, idx) => (
-                        <a key={idx} href={src.uri} target="_blank" rel="noreferrer" className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-50 dark:bg-slate-800 rounded-lg text-xs font-bold text-blue-600 dark:text-blue-400 border border-transparent hover:border-blue-100"><ExternalLink className="w-3 h-3" /><span className="truncate max-w-[150px]">{src.title}</span></a>
+                      {m.sources.map((src, i) => (
+                        <a key={i} href={src.uri} target="_blank" rel="noreferrer" className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-50 dark:bg-slate-800 rounded-xl text-[11px] font-bold text-blue-600 hover:bg-blue-100 transition-all border border-transparent hover:border-blue-200">
+                          <ExternalLink className="w-3 h-3" /> {src.title.substring(0, 20)}...
+                        </a>
                       ))}
                     </div>
                   </div>
                 )}
               </div>
-              <span className="text-[9px] font-bold text-slate-400 mt-1 uppercase tracking-widest opacity-60 flex items-center gap-1"><Loader2 className="w-3 h-3 animate-spin" /> Live typing...</span>
+              <span className="text-[9px] font-black text-slate-400 mt-2 uppercase tracking-widest opacity-60 px-2">{new Date(m.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+            </div>
+          ))}
+
+          {streamingText && (
+            <div className="flex flex-col items-start animate-in fade-in">
+              <div className="max-w-[90%] md:max-w-[80%] p-5 rounded-[2rem] bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-slate-100 rounded-tl-none shadow-sm">
+                <p className="whitespace-pre-wrap leading-relaxed font-medium text-[15px] md:text-base">{streamingText}</p>
+              </div>
+              <span className="text-[9px] font-black text-blue-600 mt-2 uppercase tracking-widest flex items-center gap-1.5 px-2">
+                <Loader2 className="w-3 h-3 animate-spin" /> إياد يحلل الويب الآن...
+              </span>
             </div>
           )}
 
-          {isTyping && <div className="flex justify-start"><div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 px-5 py-3 rounded-3xl rounded-tl-none flex gap-3 items-center shadow-sm"><div className="flex gap-1"><div className="w-2 h-2 bg-blue-500 rounded-full animate-bounce [animation-delay:-0.3s]" /><div className="w-2 h-2 bg-blue-500 rounded-full animate-bounce [animation-delay:-0.15s]" /><div className="w-2 h-2 bg-blue-500 rounded-full animate-bounce" /></div><span className="text-[10px] font-black text-slate-400 tracking-widest uppercase">Searching 2026 Web...</span></div></div>}
+          {isTyping && (
+            <div className="flex items-center gap-3 p-4 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl w-fit">
+              <div className="flex gap-1.5">
+                <div className="w-2 h-2 bg-blue-500 rounded-full animate-bounce [animation-delay:-0.3s]" />
+                <div className="w-2 h-2 bg-blue-500 rounded-full animate-bounce [animation-delay:-0.15s]" />
+                <div className="w-2 h-2 bg-blue-500 rounded-full animate-bounce" />
+              </div>
+              <span className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Browsing 2026 Web...</span>
+            </div>
+          )}
           
-          {error && <div className="p-4 bg-red-50 dark:bg-red-900/20 border-2 border-red-200 dark:border-red-900 rounded-2xl text-red-600 flex items-center gap-4 animate-in shake duration-500"><AlertCircle className="w-6 h-6 flex-shrink-0" /><div className="flex-grow"><p className="xs font-black uppercase tracking-widest opacity-60 mb-1">System Alert</p><p className="text-sm font-bold">{error}</p></div><button onClick={() => handleSend(messages[messages.length-1]?.text)} className="p-2 bg-red-100 dark:bg-red-800 rounded-xl hover:bg-red-200 dark:hover:bg-red-700 transition-colors"><RefreshCcw className="w-5 h-5" /></button></div>}
-          <div ref={scrollRef} />
+          {error && (
+            <div className="p-4 bg-red-50 dark:bg-red-950/20 border-2 border-red-200 dark:border-red-900 rounded-2xl text-red-600 flex items-center gap-3 animate-in shake">
+              <AlertCircle className="w-5 h-5 flex-shrink-0" />
+              <p className="text-sm font-bold">{error}</p>
+            </div>
+          )}
+          <div ref={scrollRef} className="h-4" />
         </div>
 
-        <div className="p-4 bg-white dark:bg-slate-950 border-t border-slate-200 dark:border-slate-800 shadow-[0_-4px_20px_rgba(0,0,0,0.03)]">
-          <div className="max-w-4xl mx-auto space-y-3">
-            {attachedImage && <div className="flex items-center gap-3 p-2 bg-blue-50 dark:bg-blue-900/20 rounded-2xl border border-blue-100 dark:border-blue-900/30 w-fit animate-in slide-in-from-bottom-2"><div className="relative w-12 h-12 rounded-xl overflow-hidden shadow-md"><img src={`data:${attachedImage.mimeType};base64,${attachedImage.data}`} className="w-full h-full object-cover" /><button onClick={() => setAttachedImage(null)} className="absolute top-0 right-0 bg-red-500 text-white p-0.5 rounded-bl-lg hover:bg-red-600 transition-colors"><X className="w-3.5 h-3.5" /></button></div><div className="pr-3"><p className="text-[10px] font-black uppercase tracking-widest text-blue-600">Attachment</p><p className="text-[10px] font-bold text-blue-400">Ready</p></div></div>}
-            <div className="flex gap-2 md:gap-3 items-center">
-              <input type="file" ref={fileInputRef} onChange={handleImageUpload} accept="image/*" className="hidden" />
-              <button onClick={() => fileInputRef.current?.click()} className="p-4 bg-slate-100 dark:bg-slate-900 text-slate-500 dark:text-slate-400 rounded-2xl hover:bg-slate-200 dark:hover:bg-slate-800 transition-all border border-slate-200 dark:border-slate-800 shadow-sm flex-shrink-0"><Paperclip className="w-6 h-6" /></button>
-              <div className="flex-grow relative flex items-center">
-                <textarea 
-                  value={input} 
-                  onChange={(e) => setInput(e.target.value)} 
-                  onKeyDown={(e) => { 
-                    if (e.key === 'Enter' && !e.shiftKey) { 
-                      e.preventDefault(); 
-                      handleSend(); 
-                    } 
-                  }} 
-                  disabled={isProcessingRef.current}
-                  placeholder="اسأل إياد عن أي شيء في 2026..." 
-                  className="w-full bg-slate-100 dark:bg-slate-900 border-2 border-transparent focus:border-blue-500/20 focus:bg-white dark:focus:bg-slate-800 rounded-2xl px-5 py-4 outline-none resize-none min-h-[56px] max-h-40 text-slate-900 dark:text-white font-medium transition-all shadow-inner disabled:opacity-50" 
-                  rows={1} 
-                />
+        {/* Bottom Input */}
+        <div className="p-4 md:p-6 bg-white dark:bg-slate-950 border-t border-slate-200 dark:border-slate-800">
+          <div className="max-w-4xl mx-auto space-y-4">
+            {attachedImage && (
+              <div className="flex items-center gap-3 p-2 bg-blue-50 dark:bg-blue-900/20 rounded-2xl border border-blue-100 dark:border-blue-900/50 w-fit animate-in slide-in-from-bottom-4">
+                <div className="relative w-14 h-14 rounded-xl overflow-hidden shadow-lg border-2 border-white dark:border-slate-700">
+                  <img src={`data:${attachedImage.mimeType};base64,${attachedImage.data}`} className="w-full h-full object-cover" alt="preview" />
+                  <button onClick={() => setAttachedImage(null)} className="absolute top-0 right-0 bg-red-500 text-white p-1 hover:bg-red-600 transition-colors"><X className="w-4 h-4" /></button>
+                </div>
+                <div className="pr-2"><p className="text-[10px] font-black uppercase text-blue-600 tracking-widest">Attachment Ready</p></div>
               </div>
-              <button onClick={toggleListening} disabled={isProcessingRef.current} className={`p-4 rounded-2xl transition-all shadow-lg flex-shrink-0 disabled:opacity-50 ${isListening ? 'bg-red-500 text-white animate-pulse ring-4 ring-red-500/20' : 'bg-slate-100 dark:bg-slate-900 text-slate-500 dark:text-slate-400 hover:text-blue-500'}`}>{isListening ? <MicOff className="w-6 h-6" /> : <Mic className="w-6 h-6" />}</button>
+            )}
+            
+            <div className="flex gap-2 md:gap-3 items-end">
+              <div className="flex-grow flex items-end bg-slate-100 dark:bg-slate-900 rounded-[2rem] p-2 border-2 border-transparent focus-within:border-blue-500/20 transition-all">
+                <input type="file" ref={fileInputRef} onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  if (file) {
+                    const reader = new FileReader();
+                    reader.onload = () => setAttachedImage({ data: (reader.result as string).split(',')[1], mimeType: file.type });
+                    reader.readAsDataURL(file);
+                  }
+                }} className="hidden" accept="image/*" />
+                <button onClick={() => fileInputRef.current?.click()} className="p-4 text-slate-500 hover:text-blue-500 hover:bg-white dark:hover:bg-slate-800 rounded-full transition-all flex-shrink-0">
+                  <ImageIcon className="w-6 h-6" />
+                </button>
+                <textarea 
+                  rows={1}
+                  value={input}
+                  onChange={(e) => setInput(e.target.value)}
+                  onKeyDown={(e) => { if(e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSend(); } }}
+                  placeholder="اسأل إياد عن أي شيء في ٢٠٢٦..."
+                  className="flex-grow bg-transparent border-none outline-none py-4 px-3 text-slate-900 dark:text-white font-medium text-[16px] md:text-lg resize-none max-h-40"
+                />
+                <button onClick={() => { if(isListening) recognitionRef.current?.stop(); else { recognitionRef.current?.start(); setIsListening(true); } }} className={`p-4 rounded-full transition-all flex-shrink-0 ${isListening ? 'bg-red-500 text-white shadow-lg animate-pulse' : 'text-slate-500 hover:text-blue-500 hover:bg-white dark:hover:bg-slate-800'}`}>
+                  {isListening ? <MicOff className="w-6 h-6" /> : <Mic className="w-6 h-6" />}
+                </button>
+              </div>
               <button 
-                onClick={() => handleSend()} 
-                disabled={(!input.trim() && !attachedImage) || isProcessingRef.current} 
-                className="p-4 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white rounded-2xl shadow-xl flex items-center justify-center transition-all active:scale-90 flex-shrink-0"
+                onClick={() => handleSend()}
+                disabled={isSending.current || (!input.trim() && !attachedImage)}
+                className="p-5 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white rounded-full shadow-2xl shadow-blue-600/30 transition-all active:scale-90 flex-shrink-0"
               >
-                {isProcessingRef.current ? <Loader2 className="w-6 h-6 animate-spin" /> : <Send className="w-6 h-6" />}
+                {isSending.current ? <Loader2 className="w-7 h-7 animate-spin" /> : <Send className="w-7 h-7" />}
               </button>
             </div>
           </div>
         </div>
       </div>
+      
+      <style>{`
+        .custom-scrollbar::-webkit-scrollbar { width: 5px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
+        .dark .custom-scrollbar::-webkit-scrollbar-thumb { background: #334155; }
+      `}</style>
     </div>
   );
 };
