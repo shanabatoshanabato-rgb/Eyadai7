@@ -48,7 +48,6 @@ export const ChatPage: React.FC = () => {
   const [editingSessionId, setEditingSessionId] = useState<string | null>(null);
   const [editTitle, setEditTitle] = useState('');
   
-  // خاص للبث (Streaming)
   const [streamingMessage, setStreamingMessage] = useState<string>('');
   const [streamingSources, setStreamingSources] = useState<{title: string, uri: string}[]>([]);
 
@@ -158,21 +157,26 @@ export const ChatPage: React.FC = () => {
 
     try {
       const currentLang = (localStorage.getItem('eyad-ai-lang') as Language) || Language.AR;
+      // الحصول على التاريخ اللحظي الدقيق
+      const now = new Date();
+      const today = now.toLocaleDateString('ar-EG', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+      
       const stream = generateTextStream(currentPrompt || "Analyze this", {
         useSearch: true,
         image: currentImg || undefined,
-        systemInstruction: `You are Eyad AI. Speak in ${currentLang}.
-        1. SPEED: Start responding immediately.
-        2. ACCURACY: Use Google Search. Provide accurate, up-to-date answers.
-        3. DIALECT: Match the user's dialect exactly.
-        4. CONCISE: Give the answer directly without long introductions.`
+        systemInstruction: `You are Eyad AI, a master engineer connected to the live web.
+        CURRENT SYSTEM DATE: ${today}.
+        CRITICAL CONTEXT: The current year is 2026.
+        SEARCH RULE: You MUST use Google Search for any query about facts, news, current events, or dates to provide 100% accurate info from 2026.
+        LANGUAGE: Respond in ${currentLang} matching the user's dialect perfectly.
+        BEHAVIOR: Be concise, fast, and extremely accurate. Start streaming the answer immediately.`
       });
 
       let finalFullText = "";
       let finalSources: any[] = [];
 
       for await (const chunk of stream) {
-        setIsTyping(false); // بمجرد بدء البث، نوقف حالة "التفكير"
+        setIsTyping(false);
         setStreamingMessage(chunk.fullText);
         setStreamingSources(chunk.sources);
         finalFullText = chunk.fullText;
@@ -289,7 +293,7 @@ export const ChatPage: React.FC = () => {
       <div className="flex-grow flex flex-col relative overflow-hidden w-full">
         <header className="px-6 py-4 flex items-center justify-between bg-white dark:bg-slate-950 border-b border-slate-200 dark:border-slate-800 z-10">
           <div className="flex items-center gap-4"><button onClick={() => setIsSidebarOpen(!isSidebarOpen)} className="p-2.5 text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-2xl transition-colors">{isSidebarOpen ? <PanelLeftClose className="w-6 h-6" /> : <PanelLeftOpen className="w-6 h-6" />}</button>
-          <div className="flex items-center gap-3"><div className="w-10 h-10 bg-blue-600 rounded-xl flex items-center justify-center text-white shadow-lg"><Sparkles className="w-5 h-5" /></div><div className="hidden sm:block"><h2 className="font-black text-slate-900 dark:text-white tracking-tight truncate max-w-[200px]">{currentSession?.title || t('chat')}</h2><p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest flex items-center gap-1"><Globe className="w-3 h-3 text-green-500" /> Grounded Search</p></div></div></div>
+          <div className="flex items-center gap-3"><div className="w-10 h-10 bg-blue-600 rounded-xl flex items-center justify-center text-white shadow-lg"><Sparkles className="w-5 h-5" /></div><div className="hidden sm:block"><h2 className="font-black text-slate-900 dark:text-white tracking-tight truncate max-w-[200px]">{currentSession?.title || t('chat')}</h2><p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest flex items-center gap-1"><Globe className="w-3 h-3 text-green-500" /> Grounded Search (2026)</p></div></div></div>
           <button onClick={() => { if(confirm(t('clearHistory') + "?")) { setSessions([]); setCurrentSessionId(null); setError(null); localStorage.removeItem('eyad-ai-sessions'); } }} className="p-2 text-slate-400 hover:text-red-500 transition-colors"><Trash2 className="w-5 h-5" /></button>
         </header>
 
@@ -308,14 +312,13 @@ export const ChatPage: React.FC = () => {
             </div>
           ))}
 
-          {/* عرض رسالة البث الحالية (Streaming) */}
           {streamingMessage && (
             <div className="flex flex-col items-start animate-in fade-in slide-in-from-bottom-2">
               <div className="relative max-w-[90%] md:max-w-[85%] p-4 rounded-3xl shadow-sm bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-slate-100 rounded-tl-none">
                 <p className="whitespace-pre-wrap leading-relaxed text-sm md:text-base font-medium">{streamingMessage}</p>
                 {streamingSources.length > 0 && (
                   <div className="mt-4 pt-3 border-t border-slate-100 dark:border-slate-800 space-y-2 animate-in fade-in">
-                    <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 flex items-center gap-1"><Globe className="w-3 h-3" /> Searching...</p>
+                    <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 flex items-center gap-1"><Globe className="w-3 h-3" /> Live Search Results</p>
                     <div className="flex flex-wrap gap-2">
                       {streamingSources.map((src, idx) => (
                         <a key={idx} href={src.uri} target="_blank" rel="noreferrer" className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-50 dark:bg-slate-800 rounded-lg text-xs font-bold text-blue-600 dark:text-blue-400 border border-transparent hover:border-blue-100"><ExternalLink className="w-3 h-3" /><span className="truncate max-w-[150px]">{src.title}</span></a>
@@ -328,7 +331,7 @@ export const ChatPage: React.FC = () => {
             </div>
           )}
 
-          {isTyping && <div className="flex justify-start"><div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 px-5 py-3 rounded-3xl rounded-tl-none flex gap-3 items-center shadow-sm"><div className="flex gap-1"><div className="w-2 h-2 bg-blue-500 rounded-full animate-bounce [animation-delay:-0.3s]" /><div className="w-2 h-2 bg-blue-500 rounded-full animate-bounce [animation-delay:-0.15s]" /><div className="w-2 h-2 bg-blue-500 rounded-full animate-bounce" /></div><span className="text-[10px] font-black text-slate-400 tracking-widest uppercase">Searching & Thinking...</span></div></div>}
+          {isTyping && <div className="flex justify-start"><div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 px-5 py-3 rounded-3xl rounded-tl-none flex gap-3 items-center shadow-sm"><div className="flex gap-1"><div className="w-2 h-2 bg-blue-500 rounded-full animate-bounce [animation-delay:-0.3s]" /><div className="w-2 h-2 bg-blue-500 rounded-full animate-bounce [animation-delay:-0.15s]" /><div className="w-2 h-2 bg-blue-500 rounded-full animate-bounce" /></div><span className="text-[10px] font-black text-slate-400 tracking-widest uppercase">Searching 2026 Web...</span></div></div>}
           
           {error && <div className="p-4 bg-red-50 dark:bg-red-900/20 border-2 border-red-200 dark:border-red-900 rounded-2xl text-red-600 flex items-center gap-4 animate-in shake duration-500"><AlertCircle className="w-6 h-6 flex-shrink-0" /><div className="flex-grow"><p className="xs font-black uppercase tracking-widest opacity-60 mb-1">System Alert</p><p className="text-sm font-bold">{error}</p></div><button onClick={() => handleSend(messages[messages.length-1]?.text)} className="p-2 bg-red-100 dark:bg-red-800 rounded-xl hover:bg-red-200 dark:hover:bg-red-700 transition-colors"><RefreshCcw className="w-5 h-5" /></button></div>}
           <div ref={scrollRef} />
@@ -351,7 +354,7 @@ export const ChatPage: React.FC = () => {
                     } 
                   }} 
                   disabled={isProcessingRef.current}
-                  placeholder="اسأل إياد أو استعمل المايك..." 
+                  placeholder="اسأل إياد عن أي شيء في 2026..." 
                   className="w-full bg-slate-100 dark:bg-slate-900 border-2 border-transparent focus:border-blue-500/20 focus:bg-white dark:focus:bg-slate-800 rounded-2xl px-5 py-4 outline-none resize-none min-h-[56px] max-h-40 text-slate-900 dark:text-white font-medium transition-all shadow-inner disabled:opacity-50" 
                   rows={1} 
                 />
