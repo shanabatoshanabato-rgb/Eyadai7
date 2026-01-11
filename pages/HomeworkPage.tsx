@@ -76,7 +76,8 @@ export const HomeworkPage: React.FC = () => {
       const res = await generateText(question.trim() || "Analyze homework", { 
         systemInstruction,
         image: image || undefined,
-        responseMimeType: "application/json"
+        responseMimeType: "application/json",
+        task: 'homework'
       });
 
       const json = extractJson(res.text) as SolutionData;

@@ -65,7 +65,10 @@ export const WritingPage = () => {
         }
         Do not include markdown code blocks.`;
         
-        const res = await generateText(prompt, { systemInstruction: "You are a professional editor. You only output valid JSON." });
+        const res = await generateText(prompt, { 
+          systemInstruction: "You are a professional editor. You only output valid JSON.",
+          task: 'writing' // Hints to use Groq if available
+        });
         const json = extractJson(res.text);
         setGrammarResult(json);
 
@@ -81,7 +84,10 @@ export const WritingPage = () => {
         Format: Markdown (Use # Headings, ## Subheadings).
         Style: Professional and authoritative.`;
 
-        const res = await generateText(prompt, { systemInstruction: "You are a long-form content creator." });
+        const res = await generateText(prompt, { 
+          systemInstruction: "You are a long-form content creator.",
+          task: 'writing' // Hints to use Groq if available
+        });
         setGenResult(res.text);
 
       } else if (mode === 'irab') {
@@ -95,7 +101,10 @@ export const WritingPage = () => {
         ]
         Do not include markdown code blocks or any other text. Only the array.`;
 
-        const res = await generateText(prompt, { systemInstruction: "You are an expert Arabic grammarian. You only output JSON arrays." });
+        const res = await generateText(prompt, { 
+          systemInstruction: "You are an expert Arabic grammarian. You only output JSON arrays.",
+          task: 'irab' // Hints to use OpenAI if available
+        });
         const json = extractJson(res.text);
         
         if (!Array.isArray(json)) {
@@ -116,7 +125,10 @@ export const WritingPage = () => {
           "explanation": "Brief note about why this change was suggested or what the word means"
         }`;
 
-        const res = await generateText(prompt, { systemInstruction: "You are a vocabulary expert. You only output valid JSON." });
+        const res = await generateText(prompt, { 
+          systemInstruction: "You are a vocabulary expert. You only output valid JSON.",
+          task: 'writing' 
+        });
         const json = extractJson(res.text);
         setVocabResult(json);
       }

@@ -10,12 +10,15 @@ export const DEFAULT_SETTINGS = {
 export const VOICE_IDS = ['adam', 'sarah'];
 
 export const MODELS = {
-  GENERAL: 'gemini-3-flash-preview',
-  COMPLEX: 'gemini-3-pro-preview',
-  LIVE: 'gemini-2.5-flash-native-audio-preview-12-2025'
+  // Fast and capable for general chat
+  GENERAL: 'gemini-2.0-flash', 
+  // High reasoning for homework/complex tasks
+  COMPLEX: 'gemini-2.0-flash-thinking-exp-01-21', 
+  // Native audio capabilities
+  LIVE: 'gemini-2.0-flash-exp' 
 };
 
 export const VOICE_MAP: Record<string, string> = {
-  'adam': 'Zephyr',
+  'adam': 'Puck',
   'sarah': 'Kore'
 };

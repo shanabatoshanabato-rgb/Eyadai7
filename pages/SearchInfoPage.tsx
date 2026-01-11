@@ -7,11 +7,13 @@ import {
   Loader2, 
   ExternalLink, 
   Link as LinkIcon,
-  Zap
+  Zap,
+  AlertTriangle
 } from 'lucide-react';
 import { generateText } from '../services/geminiService';
 import { useTranslation } from '../translations';
 import { MODELS } from '../constants';
+import { Language } from '../types';
 
 export const SearchInfoPage: React.FC = () => {
   const [query, setQuery] = useState('');
@@ -26,11 +28,22 @@ export const SearchInfoPage: React.FC = () => {
     setError(null);
     setResult(null);
 
+    const currentLang = localStorage.getItem('eyad-ai-lang') || 'ar';
+    const isArabic = currentLang === Language.AR || currentLang === Language.DIALECT;
+
     try {
+      // Optimized prompt for Free Tier: Requests concise answers to save TPM (Tokens Per Minute)
+      const systemInstruction = `You are Eyad AI Encyclopedia. 
+      - Your task: Search Google and provide a summarized, accurate answer.
+      - CRITICAL: Keep your answer CONCISE and direct to save resources. 
+      - Do not hallucinate. Use only the provided search results.
+      - Answer in the user's language.`;
+
       const response = await generateText(query, {
         useSearch: true,
         model: MODELS.GENERAL, 
-        systemInstruction: "You are Eyad AI Encyclopedia. Provide a detailed, organized response using the latest web data. Always focus on accuracy and cite sources. Answer in the user's language."
+        systemInstruction,
+        task: 'search'
       });
       
       setResult({
@@ -38,7 +51,15 @@ export const SearchInfoPage: React.FC = () => {
         sources: response.sources || []
       });
     } catch (err: any) {
-      setError(t('searchError'));
+      console.error(err);
+      // specific handling for Free Tier limits
+      if (err.message?.includes('429') || err.message?.includes('quota') || err.status === 429) {
+        setError(isArabic 
+          ? "⚠️ وصلت للحد الأقصى للخطة المجانية (Quota). انتظر دقيقة وحاول تاني." 
+          : "⚠️ Free Tier Quota Exceeded. Please wait a minute and try again.");
+      } else {
+        setError(t('searchError'));
+      }
     } finally {
       setIsSearching(false);
     }
@@ -120,9 +141,11 @@ export const SearchInfoPage: React.FC = () => {
       )}
 
       {error && (
-        <div className="max-w-2xl mx-auto p-8 bg-red-50 dark:bg-red-900/10 border-2 border-red-100 dark:border-red-900/30 rounded-[2.5rem] text-red-600 text-center font-black flex flex-col items-center gap-4">
-          <Zap className="w-6 h-6 text-red-600" />
-          {error}
+        <div className="max-w-2xl mx-auto p-6 bg-red-50 dark:bg-red-900/10 border-2 border-red-100 dark:border-red-900/30 rounded-[2.5rem] text-red-600 dark:text-red-400 text-center font-bold flex flex-col items-center gap-3 animate-in zoom-in">
+          <div className="p-3 bg-red-100 dark:bg-red-900/30 rounded-full">
+            <AlertTriangle className="w-6 h-6" />
+          </div>
+          <p className="text-lg">{error}</p>
         </div>
       )}
     </div>

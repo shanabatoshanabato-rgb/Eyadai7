@@ -13,11 +13,22 @@ import {
   X as CloseIcon,
   Trash,
   PanelLeftClose,
-  PanelLeftOpen
+  PanelLeftOpen,
+  Mic,
+  Square,
+  Volume2,
+  VolumeX
 } from 'lucide-react';
 import { generateTextStream } from '../services/geminiService';
-import { Message, ChatSession } from '../types';
+import { Message, ChatSession, Language } from '../types';
 import { useTranslation } from '../translations';
+
+// Native Speech Recognition Type Definition
+declare global {
+  interface Window {
+    webkitSpeechRecognition: any;
+  }
+}
 
 export const ChatPage: React.FC = () => {
   const t = useTranslation();
@@ -36,6 +47,12 @@ export const ChatPage: React.FC = () => {
   const [attachedImage, setAttachedImage] = useState<{data: string, mimeType: string} | null>(null);
   const [streamingText, setStreamingText] = useState('');
   const [error, setError] = useState<string | null>(null);
+
+  // Audio State (Native)
+  const [isRecording, setIsRecording] = useState(false);
+  const recognitionRef = useRef<any>(null);
+  const [isSpeaking, setIsSpeaking] = useState(false);
+  const [speakingId, setSpeakingId] = useState<string | null>(null);
 
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editingTitle, setEditingTitle] = useState('');
@@ -60,8 +77,83 @@ export const ChatPage: React.FC = () => {
     scrollRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages.length, streamingText, isTyping, error]);
 
+  // --- Native Speech Recognition (STT) ---
+  const toggleRecording = () => {
+    if (isRecording) {
+      recognitionRef.current?.stop();
+      setIsRecording(false);
+      return;
+    }
+
+    if (!('webkitSpeechRecognition' in window)) {
+      setError("Browser doesn't support speech recognition.");
+      return;
+    }
+
+    const recognition = new window.webkitSpeechRecognition();
+    recognition.continuous = false;
+    recognition.interimResults = false;
+    
+    // Detect language preference
+    const lang = localStorage.getItem('eyad-ai-lang') || 'ar';
+    recognition.lang = lang === 'en' ? 'en-US' : 'ar-SA';
+
+    recognition.onstart = () => setIsRecording(true);
+    recognition.onend = () => setIsRecording(false);
+    
+    recognition.onresult = (event: any) => {
+      const transcript = event.results[0][0].transcript;
+      setInput(prev => prev + (prev ? ' ' : '') + transcript);
+      handleSend(transcript); // Optional: Auto send
+    };
+
+    recognition.onerror = (event: any) => {
+      console.error(event.error);
+      setIsRecording(false);
+    };
+
+    recognitionRef.current = recognition;
+    recognition.start();
+  };
+
+  // --- Native Speech Synthesis (TTS) ---
+  const speakText = (text: string, id: string) => {
+    if (speakingId === id) {
+      window.speechSynthesis.cancel();
+      setSpeakingId(null);
+      setIsSpeaking(false);
+      return;
+    }
+
+    window.speechSynthesis.cancel(); // Stop previous
+    
+    const utterance = new SpeechSynthesisUtterance(text);
+    const lang = localStorage.getItem('eyad-ai-lang') || 'ar';
+    
+    // Attempt to pick a good voice
+    const voices = window.speechSynthesis.getVoices();
+    let selectedVoice = null;
+
+    if (lang === 'ar' || /[\u0600-\u06FF]/.test(text)) {
+      utterance.lang = 'ar-SA';
+      // Try to find an Arabic voice
+      selectedVoice = voices.find(v => v.lang.includes('ar'));
+    } else {
+      utterance.lang = 'en-US';
+      selectedVoice = voices.find(v => v.lang.includes('en'));
+    }
+    
+    if (selectedVoice) utterance.voice = selectedVoice;
+
+    utterance.onstart = () => { setIsSpeaking(true); setSpeakingId(id); };
+    utterance.onend = () => { setIsSpeaking(false); setSpeakingId(null); };
+    utterance.onerror = () => { setIsSpeaking(false); setSpeakingId(null); };
+
+    window.speechSynthesis.speak(utterance);
+  };
+
   const handleSend = async (forcedPrompt?: string) => {
-    const pText = (forcedPrompt || input).trim();
+    const pText = (typeof forcedPrompt === 'string' ? forcedPrompt : input).trim();
     if (isSending.current || (!pText && !attachedImage)) return;
 
     isSending.current = true;
@@ -100,11 +192,21 @@ export const ChatPage: React.FC = () => {
     setInput('');
     setAttachedImage(null);
 
+    const currentMessages = sessions.find(s => s.id === sId)?.messages || [];
+    const history = [...currentMessages, userMsg]
+      .slice(-10)
+      .map(m => ({
+        role: m.role as 'user' | 'model',
+        content: m.text
+      }));
+
     try {
       const stream = generateTextStream(pText, {
         useSearch: false, 
         image: backupImg || undefined,
-        systemInstruction: "You are Eyad AI, a brilliant and helpful educational partner. Answer concisely and creatively."
+        systemInstruction: "You are Eyad AI, a fully intelligent, brilliant and helpful educational partner. Answer concisely, naturally, and creatively in the user's language.",
+        task: 'chat',
+        history: history
       });
 
       let fullText = "";
@@ -128,7 +230,7 @@ export const ChatPage: React.FC = () => {
       } : s));
       setStreamingText('');
     } catch (err: any) {
-      setError("Connection error.");
+      setError("Connection error. Check API Key.");
     } finally {
       setIsTyping(false);
       isSending.current = false;
@@ -158,7 +260,7 @@ export const ChatPage: React.FC = () => {
   return (
     <div className="flex h-[calc(100vh-80px)] bg-white dark:bg-[#020617] text-slate-900 dark:text-white overflow-hidden relative transition-colors duration-300">
       
-      {/* Sidebar with Toggle logic */}
+      {/* Sidebar */}
       <div 
         className={`bg-slate-50 dark:bg-[#020617] border-e border-slate-200 dark:border-white/5 flex flex-col shrink-0 transition-all duration-300 ease-in-out hidden md:flex shadow-sm ${
           isSidebarOpen ? 'w-72 opacity-100' : 'w-0 opacity-0 overflow-hidden border-none'
@@ -250,13 +352,23 @@ export const ChatPage: React.FC = () => {
               <div key={m.id} className={`flex ${m.role === 'user' ? 'justify-end' : 'justify-start'} group relative`}>
                 <div className={`max-w-[85%] relative ${m.role === 'user' ? 'bg-blue-600 text-white shadow-xl shadow-blue-600/20' : 'bg-slate-100 dark:bg-white/5 border border-slate-200 dark:border-white/10 text-slate-900 dark:text-white'} p-5 rounded-[2rem] shadow-sm`}>
                   
-                  <button 
-                    onClick={() => deleteMessage(m.id)}
-                    className="absolute -top-3 -right-3 p-2 bg-red-600 text-white rounded-full opacity-0 group-hover:opacity-100 transition-all shadow-xl z-10 hover:scale-110 active:scale-90"
-                    title={t('delete')}
-                  >
-                    <Trash size={12}/>
-                  </button>
+                  {/* Action Buttons */}
+                  <div className="absolute -top-3 -right-3 flex gap-2 opacity-0 group-hover:opacity-100 transition-all z-10">
+                     <button 
+                      onClick={() => speakText(m.text, m.id)}
+                      className={`p-2 rounded-full shadow-xl hover:scale-110 active:scale-90 transition-all ${speakingId === m.id ? 'bg-blue-500 text-white animate-pulse' : 'bg-white dark:bg-slate-800 text-slate-500 hover:text-blue-600'}`}
+                      title="Read Aloud"
+                    >
+                      {speakingId === m.id ? <VolumeX size={12}/> : <Volume2 size={12}/>}
+                    </button>
+                    <button 
+                      onClick={() => deleteMessage(m.id)}
+                      className="p-2 bg-red-600 text-white rounded-full shadow-xl hover:scale-110 active:scale-90 transition-all"
+                      title={t('delete')}
+                    >
+                      <Trash size={12}/>
+                    </button>
+                  </div>
 
                   {m.image && <img src={`data:${m.image.mimeType};base64,${m.image.data}`} className="max-w-full rounded-2xl mb-4 border border-white/10" alt="sent"/>}
                   <p className="whitespace-pre-wrap font-bold text-sm md:text-base leading-relaxed tracking-tight">{m.text}</p>
@@ -323,10 +435,19 @@ export const ChatPage: React.FC = () => {
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
                 onKeyDown={(e) => { if(e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSend(); } }}
-                placeholder={t('askEyad')}
+                placeholder={isRecording ? "Listening..." : t('askEyad')}
                 rows={1}
                 className="flex-grow bg-transparent border-none outline-none py-3 px-2 text-base md:text-lg font-bold resize-none max-h-40 placeholder:text-slate-400 dark:text-white"
               />
+
+              {/* STT Button (Native) */}
+              <button 
+                onClick={toggleRecording}
+                className={`p-3 rounded-full transition-all active:scale-90 ${isRecording ? 'bg-red-500 text-white animate-pulse' : 'text-slate-400 hover:text-blue-600 hover:bg-white dark:hover:bg-white/10'}`}
+                title="Voice Input"
+              >
+                {isRecording ? <Square size={20} fill="currentColor" /> : <Mic size={22}/>}
+              </button>
               
               <button 
                 onClick={() => handleSend()} 

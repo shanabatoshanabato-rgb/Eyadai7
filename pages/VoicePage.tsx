@@ -61,6 +61,32 @@ export const VoicePage: React.FC = () => {
       const voice = localStorage.getItem('eyad-ai-voice') || DEFAULT_SETTINGS.voiceName;
       const currentLang = (localStorage.getItem('eyad-ai-lang') as Language) || Language.AR;
       
+      // --- Dynamic System Instruction based on Language ---
+      // OPTIMIZED FOR FREE TIER: Restricting search usage to prevent Rate Limit errors.
+      let instruction = "";
+      const searchInstruction = "You have access to Google Search. CRITICAL: Use it ONLY for real-time news, weather, or time-sensitive questions. Do NOT use it for general knowledge to save API resources.";
+
+      if (currentLang === Language.DIALECT) {
+        // Egyptian Mode
+        instruction = `You are Eyad, a friendly Egyptian AI assistant. 
+        CRITICAL: You MUST speak in authentic Egyptian Arabic (Masri) ONLY.
+        - Pronunciation: Use the Cairo accent (pronounce 'J' as 'G' like 'Game', drop the 'Qaf').
+        - Vocabulary: Use Egyptian words like 'Ezzayak', 'Keda', '3aiz', 'Msh', 'Ya Basha'.
+        - Tone: Casual, warm, funny, and natural. Like talking to a close friend.
+        - Do NOT use Standard Arabic (Fusha).
+        - ${searchInstruction}`;
+      } else if (currentLang === Language.AR) {
+        // Standard Arabic Mode (Fusha) - High Quality Articulation
+        instruction = `You are Eyad AI Voice. Respond in Modern Standard Arabic (Fusha). 
+        - Speak clearly, deliberately, and articulate every letter distinctively. 
+        - Focus on high-quality pronunciation (حسن مخارج الحروف).
+        - Be concise and helpful.
+        - ${searchInstruction}`;
+      } else {
+        // Other Languages
+        instruction = `You are Eyad AI Voice. Respond in ${currentLang}. Speak naturally and clearly. ${searchInstruction}`;
+      }
+
       const sessionPromise = ai.live.connect({
         model: MODELS.LIVE,
         callbacks: {
@@ -96,17 +122,23 @@ export const VoicePage: React.FC = () => {
             }
           },
           onclose: () => stopEverything(),
-          onerror: (e) => stopEverything(),
+          onerror: (e) => {
+            console.error("Voice Error", e);
+            setError("Connection issue. Check Quota/Internet.");
+            stopEverything();
+          },
         },
         config: {
           responseModalities: [Modality.AUDIO],
           speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: VOICE_MAP[voice] || 'Zephyr' } } },
-          systemInstruction: `You are Eyad AI Voice. Respond in ${currentLang}. Be concise and helpful.`
+          systemInstruction: instruction,
+          tools: [{ googleSearch: {} }]
         }
       });
       sessionRef.current = await sessionPromise;
     } catch (err: any) {
-      setError("Microphone error.");
+      console.error(err);
+      setError("Microphone error or Connection failed.");
       stopEverything();
     }
   };
