@@ -10,7 +10,6 @@ const getApiKey = () => {
   return key;
 };
 
-// Create a new GoogleGenAI instance right before making an API call to ensure it always uses the most up-to-date API key
 export const getAI = () => {
   const apiKey = getApiKey();
   if (!apiKey) throw new Error("API_KEY_MISSING");
@@ -29,86 +28,65 @@ export interface AIResponse {
   sources: { title: string; uri: string }[];
 }
 
-/**
- * Robust JSON extraction utility.
- * Cleans markdown, handles conversational prefixes, and extracts valid JSON objects or arrays.
- */
 export const extractJson = (text: string) => {
   try {
-    // 1. Basic cleanup of markdown and whitespace
-    const cleaned = text.replace(/```json/gi, '').replace(/```/g, '').trim();
+    // تنظيف النص من أي زوائد قبل أو بعد الـ JSON
+    let cleaned = text.trim();
     
-    // 2. Identify the outermost structure (object or array)
-    const firstBrace = cleaned.indexOf('{');
-    const firstBracket = cleaned.indexOf('[');
-    
-    // Determine which structure starts first
-    let startChar = '';
-    let endChar = '';
-    let startIdx = -1;
-    let endIdx = -1;
+    // محاولة إيجاد أول { أو [ وآخر } أو ]
+    const startBrace = cleaned.indexOf('{');
+    const startBracket = cleaned.indexOf('[');
+    const endBrace = cleaned.lastIndexOf('}');
+    const endBracket = cleaned.lastIndexOf(']');
 
-    if (firstBrace !== -1 && (firstBracket === -1 || firstBrace < firstBracket)) {
-      startChar = '{';
-      endChar = '}';
-    } else if (firstBracket !== -1) {
-      startChar = '[';
-      endChar = ']';
+    let start = -1;
+    let end = -1;
+
+    if (startBrace !== -1 && (startBracket === -1 || startBrace < startBracket)) {
+      start = startBrace;
+      end = endBrace;
+    } else if (startBracket !== -1) {
+      start = startBracket;
+      end = endBracket;
     }
 
-    if (startChar) {
-      startIdx = cleaned.indexOf(startChar);
-      endIdx = cleaned.lastIndexOf(endChar);
+    if (start !== -1 && end !== -1 && end > start) {
+      const jsonStr = cleaned.substring(start, end + 1);
+      return JSON.parse(jsonStr);
     }
 
-    if (startIdx === -1 || endIdx === -1) {
-      // Fallback: try to parse the cleaned text directly
-      return JSON.parse(cleaned);
-    }
-    
-    const jsonStr = cleaned.substring(startIdx, endIdx + 1);
-    return JSON.parse(jsonStr);
+    // إذا لم ينجح، نحاول التنظيف العادي
+    cleaned = cleaned.replace(/```json/gi, '').replace(/```/g, '').trim();
+    return JSON.parse(cleaned);
   } catch (e) {
-    console.error("Critical JSON Parse Error:", e, "Input Text:", text);
+    console.error("Critical JSON Parse Error:", e, "Raw text:", text);
     throw new Error("FAILED_TO_PARSE_JSON");
   }
 };
 
-const TEXT_MODELS_FALLBACK = [
-  'gemini-3-flash-preview',
-  'gemini-flash-latest',
-  'gemini-flash-lite-latest'
-];
-
 export const generateText = async (prompt: string, options?: GenerateOptions): Promise<AIResponse> => {
+  const modelName = options?.useSearch ? 'gemini-3-pro-preview' : 'gemini-3-flash-preview';
   let lastError: any = null;
-  
-  // Use recommended model names from guidelines
-  const modelsToTry = options?.image 
-    ? ['gemini-3-flash-preview', 'gemini-flash-latest'] 
-    : (options?.useSearch ? ['gemini-3-flash-preview', 'gemini-flash-latest'] : TEXT_MODELS_FALLBACK);
 
-  for (const modelName of modelsToTry) {
+  // Retry logic (3 attempts)
+  for (let attempt = 0; attempt < 3; attempt++) {
     try {
       const ai = getAI();
       const parts: any[] = [{ text: prompt }];
       
       if (options?.image) {
         parts.push({
-          inlineData: {
-            data: options.image.data,
-            mimeType: options.image.mimeType
-          }
+          inlineData: { data: options.image.data, mimeType: options.image.mimeType }
         });
       }
 
       const config: any = {
-        systemInstruction: options?.systemInstruction || "You are Eyad AI, a professional tutor.",
-        thinkingConfig: { thinkingBudget: 0 } // Disable thinking for immediate output to avoid timeouts
+        systemInstruction: options?.systemInstruction || "You are Eyad AI, a professional helpful assistant.",
+        temperature: 0.7,
       };
 
-      if (options?.responseMimeType && !options?.useSearch) {
-        config.responseMimeType = options.responseMimeType;
+      if (options?.responseMimeType === "application/json") {
+        config.responseMimeType = "application/json";
       }
 
       if (options?.useSearch) {
@@ -121,31 +99,37 @@ export const generateText = async (prompt: string, options?: GenerateOptions): P
         config
       });
 
-      // Use .text property as per instructions
-      const text = response.text || '';
-      const sources: { title: string; uri: string }[] = [];
+      if (!response.text) throw new Error("EMPTY_RESPONSE");
 
+      const text = response.text;
+      const sources: { title: string; uri: string }[] = [];
       const chunks = response.candidates?.[0]?.groundingMetadata?.groundingChunks;
+      
       if (chunks) {
         chunks.forEach((chunk: any) => {
           if (chunk.web?.uri) {
-            sources.push({
-              title: chunk.web.title || chunk.web.uri,
-              uri: chunk.web.uri
-            });
+            sources.push({ title: chunk.web.title || chunk.web.uri, uri: chunk.web.uri });
           }
         });
       }
 
       return { text, sources };
     } catch (error: any) {
-      console.warn(`Model ${modelName} failed, trying next...`, error.message);
       lastError = error;
-      if (error.message?.includes('429') || error.status === 429) continue; 
-      throw error;
+      const status = error.status || (error.message?.includes('429') ? 429 : 500);
+      
+      console.warn(`Attempt ${attempt + 1} for ${modelName} failed: ${error.message}`);
+      
+      if (status === 429 || status === 503 || status === 500) {
+        await new Promise(r => setTimeout(r, 1000 * (attempt + 1))); // انتظر قليلاً قبل المحاولة مرة أخرى
+        continue;
+      }
+      break; 
     }
   }
-  throw lastError;
+  
+  if (lastError?.status === 429) throw new Error("RATE_LIMIT_EXCEEDED");
+  throw lastError || new Error("CONNECTION_ERROR");
 };
 
 export const generateSpeech = async (text: string, voiceName: string = 'Kore'): Promise<string | null> => {
